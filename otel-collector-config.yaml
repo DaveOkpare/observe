@@ -1,6 +1,12 @@
 # OpenTelemetry Collector Configuration for Observe Project
 # Receives OTLP data and forwards to custom ingestor
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1888
+
 receivers:
   # OTLP receiver - accepts traces and logs from instrumented apps
   otlp:
@@ -58,7 +64,7 @@ service:
       exporters: [debug]
 
   # Health check and metrics
-  extensions: []
+  extensions: [health_check, pprof]
   
   telemetry:
     logs:
