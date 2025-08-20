@@ -1,0 +1,67 @@
+# OpenTelemetry Collector Configuration for Observe Project
+# Receives OTLP data and forwards to custom ingestor
+
+receivers:
+  # OTLP receiver - accepts traces and logs from instrumented apps
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317  # Standard OTLP gRPC port
+      http:
+        endpoint: 0.0.0.0:4318  # Standard OTLP HTTP port
+        cors:
+          allowed_origins:
+            - "*"  # Allow CORS for web apps
+
+processors:
+  # Batch processor - improves performance by batching telemetry
+  batch:
+    timeout: 1s           # Send batch every 1 second
+    send_batch_size: 1024 # Or when batch reaches 1024 items
+  
+  # Memory limiter - prevents OOM issues
+  memory_limiter:
+    limit_mib: 512  # 512MB memory limit
+    spike_limit_mib: 256
+    check_interval: 10
+
+  # Resource processor - add deployment info
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "development"
+        action: upsert
+
+exporters:
+  # TODO: Update endpoint when ingestor service is added to docker-compose
+  # For now, using debug exporter only
+  debug:
+    verbosity: detailed
+  
+  # Placeholder for future ingestor service
+  # otlphttp:
+  #   endpoint: http://ingestor:8000
+  #   timeout: 10s
+
+service:
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]
+    
+    # Logs pipeline  
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]
+
+  # Health check and metrics
+  extensions: []
+  
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: "basic"
