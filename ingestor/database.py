@@ -9,7 +9,9 @@ from ingestor.models import TraceRequest, flatten_attributes
 load_dotenv()
 
 # Module-level configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/observe")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/observe"
+)
 pool: Optional[asyncpg.Pool] = None
 
 
@@ -18,9 +20,9 @@ async def init_db_pool():
     global pool
     pool = await asyncpg.create_pool(
         DATABASE_URL,
-        min_size=5,    # Smaller pool for development
-        max_size=10,   # Can be increased for production
-        command_timeout=60
+        min_size=5,  # Smaller pool for development
+        max_size=10,  # Can be increased for production
+        command_timeout=60,
     )
     print(f"Database pool initialized: {DATABASE_URL}")
 
@@ -55,10 +57,10 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                     "end_time": span.end_time_unix_nano,
                     "status_code": span.status.get("code", 0) if span.status else 0,
                     "attributes": flatten_attributes(span.attributes),
-                    "resource_attributes": resource_attrs
+                    "resource_attributes": resource_attrs,
                 }
                 spans_data.append(span_data)
-    
+
     return spans_data
 
 
@@ -86,16 +88,18 @@ async def insert_spans_batch(spans_data: list[dict]):
                     span["start_time"],
                     span["end_time"],
                     span["status_code"],
-                    json.dumps(span["attributes"]),        # Convert dict to JSON string
-                    json.dumps(span["resource_attributes"]) # Convert dict to JSON string
+                    json.dumps(span["attributes"]),  # Convert dict to JSON string
+                    json.dumps(
+                        span["resource_attributes"]
+                    ),  # Convert dict to JSON string
                 )
                 for span in spans_data
             ]
-            
+
             # Bulk insert - much faster than individual INSERTs
             await conn.executemany(query, rows)
             print(f"Inserted {len(spans_data)} spans successfully")
-            
+
     except Exception as e:
         # Log error but don't crash - telemetry ingestion should be resilient
         print(f"Database error inserting spans: {e}")
