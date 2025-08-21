@@ -1,4 +1,8 @@
 services:
+  ingestor:
+    build: .
+    environment: 
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/observe
   postgres:
     image: postgres:15
     environment:
