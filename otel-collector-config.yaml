@@ -39,15 +39,18 @@ processors:
         action: upsert
 
 exporters:
-  # TODO: Update endpoint when ingestor service is added to docker-compose
-  # For now, using debug exporter only
+  # Send to ingestor service
+  otlphttp:
+    endpoint: http://ingestor:8000
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+  
+  # Keep debug for development
   debug:
     verbosity: detailed
-  
-  # Placeholder for future ingestor service
-  # otlphttp:
-  #   endpoint: http://ingestor:8000
-  #   timeout: 10s
 
 service:
   pipelines:
@@ -55,7 +58,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [debug]
+      exporters: [otlphttp, debug]
     
     # Logs pipeline  
     logs:
