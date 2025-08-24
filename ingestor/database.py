@@ -51,6 +51,7 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                 span_data = {
                     "trace_id": span.trace_id,
                     "span_id": span.span_id,
+                    "parent_span_id": span.parent_span_id,
                     "operation_name": span.name,
                     "service_name": resource_attrs.get("service.name", "unknown"),
                     "start_time": span.start_time_unix_nano,
@@ -71,9 +72,9 @@ async def insert_spans_batch(spans_data: list[dict]):
 
     # SQL query with parameter placeholders
     query = """
-        INSERT INTO spans (trace_id, span_id, operation_name, service_name, 
+        INSERT INTO spans (trace_id, span_id, parent_span_id, operation_name, service_name, 
                           start_time, end_time, status_code, attributes, resource_attributes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     """
 
     try:
@@ -83,6 +84,7 @@ async def insert_spans_batch(spans_data: list[dict]):
                 (
                     span["trace_id"],
                     span["span_id"],
+                    span["parent_span_id"],
                     span["operation_name"],
                     span["service_name"],
                     span["start_time"],
