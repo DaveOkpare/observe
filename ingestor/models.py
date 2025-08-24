@@ -3,9 +3,15 @@ from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator
 
 
+class OTLPAttributeValue(BaseModel):
+    stringValue: Optional[str] = None
+    intValue: Optional[str] = None  # JSON sends as string
+    doubleValue: Optional[float] = None
+    boolValue: Optional[bool] = None
+
 class OTLPAttribute(BaseModel):
     key: str
-    value: Union[str, int, float, bool]  # OTLP supported types
+    value: OTLPAttributeValue
 
 
 class OTLPSpan(BaseModel):
@@ -44,4 +50,17 @@ class TraceRequest(BaseModel):
 
 def flatten_attributes(attributes: list[OTLPAttribute]) -> dict:
     """Convert OTLP attributes array to flat dict for JSONB storage"""
-    return {attr.key: attr.value for attr in attributes}
+    result = {}
+    for attr in attributes:
+        # Extract actual value from structured OTLP format
+        if attr.value.stringValue is not None:
+            result[attr.key] = attr.value.stringValue
+        elif attr.value.intValue is not None:
+            result[attr.key] = int(attr.value.intValue)
+        elif attr.value.doubleValue is not None:
+            result[attr.key] = attr.value.doubleValue
+        elif attr.value.boolValue is not None:
+            result[attr.key] = attr.value.boolValue
+        else:
+            result[attr.key] = str(attr.value)
+    return result
