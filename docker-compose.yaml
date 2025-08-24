@@ -1,8 +1,12 @@
 services:
   ingestor:
     build: .
+    ports:
+      - "8000:8000"  # Expose ingestor port
     environment: 
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/observe
+    depends_on:
+      - postgres
   postgres:
     image: postgres:15
     environment:
@@ -37,6 +41,7 @@ services:
       - 55679:55679 # zpages extension
     depends_on:
       - postgres
+      - ingestor
 
 volumes:
   postgres_data:
