@@ -43,6 +43,8 @@ exporters:
   otlphttp:
     endpoint: http://ingestor:8000
     timeout: 10s
+    encoding: json  # Send JSON instead of protobuf
+    compression: none  # Disable compression for easier debugging
     retry_on_failure:
       enabled: true
       initial_interval: 1s
