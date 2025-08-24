@@ -9,6 +9,7 @@ class OTLPAttributeValue(BaseModel):
     doubleValue: Optional[float] = None
     boolValue: Optional[bool] = None
 
+
 class OTLPAttribute(BaseModel):
     key: str
     value: OTLPAttributeValue
