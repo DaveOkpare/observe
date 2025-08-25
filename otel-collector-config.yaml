@@ -61,12 +61,6 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [otlphttp, debug]
-    
-    # Logs pipeline  
-    logs:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug]
 
   # Health check and metrics
   extensions: [health_check, pprof]
