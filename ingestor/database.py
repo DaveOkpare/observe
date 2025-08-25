@@ -47,6 +47,10 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
 
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
+                # Extract span_type from Logfire attributes (defaults to 'span')
+                span_attrs = flatten_attributes(span.attributes)
+                span_type = span_attrs.get("logfire.span_type", "span")
+
                 # Transform each span to match our database schema
                 span_data = {
                     "trace_id": span.trace_id,
@@ -54,10 +58,11 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                     "parent_span_id": span.parent_span_id,
                     "operation_name": span.name,
                     "service_name": resource_attrs.get("service.name", "unknown"),
+                    "span_type": span_type,
                     "start_time": span.start_time_unix_nano,
                     "end_time": span.end_time_unix_nano,
                     "status_code": span.status.get("code", 0) if span.status else 0,
-                    "attributes": flatten_attributes(span.attributes),
+                    "attributes": span_attrs,
                     "resource_attributes": resource_attrs,
                 }
                 spans_data.append(span_data)
@@ -72,9 +77,9 @@ async def insert_spans_batch(spans_data: list[dict]):
 
     # SQL query with parameter placeholders
     query = """
-        INSERT INTO spans (trace_id, span_id, parent_span_id, operation_name, service_name, 
+        INSERT INTO spans (trace_id, span_id, parent_span_id, operation_name, service_name, span_type,
                           start_time, end_time, status_code, attributes, resource_attributes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     """
 
     try:
@@ -87,6 +92,7 @@ async def insert_spans_batch(spans_data: list[dict]):
                     span["parent_span_id"],
                     span["operation_name"],
                     span["service_name"],
+                    span["span_type"],
                     span["start_time"],
                     span["end_time"],
                     span["status_code"],
@@ -106,8 +112,3 @@ async def insert_spans_batch(spans_data: list[dict]):
         # Log error but don't crash - telemetry ingestion should be resilient
         print(f"Database error inserting spans: {e}")
         # OTel Collector expects success response even on partial failures
-
-
-# Future: Add similar functions for logs
-# async def insert_logs_batch(logs_data: list[dict]):
-#     pass
