@@ -3,7 +3,7 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Spans table - stores distributed tracing data
+-- Spans table - stores distributed tracing data (includes logs as spans with span_type)
 CREATE TABLE spans (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     trace_id VARCHAR(32) NOT NULL,
@@ -11,6 +11,7 @@ CREATE TABLE spans (
     parent_span_id VARCHAR(16),
     operation_name VARCHAR(255) NOT NULL,
     service_name VARCHAR(255) NOT NULL,
+    span_type VARCHAR(20) NOT NULL DEFAULT 'span', -- 'span', 'log', etc.
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     duration_ms INTEGER GENERATED ALWAYS AS (
@@ -21,6 +22,16 @@ CREATE TABLE spans (
     attributes JSONB,
     events JSONB,
     resource_attributes JSONB,
+    log_level TEXT GENERATED ALWAYS AS (
+        CASE 
+            WHEN span_type <> 'log' THEN NULL
+            WHEN CAST(attributes->>'logfire.level_num' AS INTEGER) = 5 THEN 'DEBUG'
+            WHEN CAST(attributes->>'logfire.level_num' AS INTEGER) = 9 THEN 'INFO' 
+            WHEN CAST(attributes->>'logfire.level_num' AS INTEGER) = 13 THEN 'WARNING'
+            WHEN CAST(attributes->>'logfire.level_num' AS INTEGER) = 17 THEN 'ERROR'
+            ELSE 'UNKNOWN'
+        END
+    ) STORED,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -55,6 +66,8 @@ CREATE INDEX idx_spans_service_name ON spans(service_name);
 CREATE INDEX idx_spans_start_time ON spans(start_time);
 CREATE INDEX idx_spans_operation_name ON spans(operation_name);
 CREATE INDEX idx_spans_status_code ON spans(status_code);
+CREATE INDEX idx_spans_span_type ON spans(span_type);
+CREATE INDEX idx_spans_log_level ON spans(log_level) WHERE span_type = 'log';
 
 CREATE INDEX idx_logs_trace_id ON logs(trace_id);
 CREATE INDEX idx_logs_timestamp ON logs(timestamp);
