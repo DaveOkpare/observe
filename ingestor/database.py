@@ -141,7 +141,8 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
                 MIN(operation_name)
             ) as operation_name,
             COUNT(*) as span_count,
-            MAX(status_code) as status_code
+            MAX(status_code) as status_code,
+            EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time))) * 1000 as duration_ms
         FROM spans
         WHERE span_type = 'span' {where_clause}
         GROUP BY trace_id
@@ -159,7 +160,7 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
         "operation_name": row["operation_name"],
         "start_time": row["start_time"],
         "end_time": row["end_time"],
-        "duration_ms": (row["end_time"] - row["start_time"]) / 1_000_000,
+        "duration_ms": row["duration_ms"],
         "span_count": row["span_count"],
         "status_code": row["status_code"],
         "status": "error" if row["status_code"] > 0 else "ok",
