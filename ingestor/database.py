@@ -115,50 +115,75 @@ async def insert_spans_batch(spans_data: list[dict]):
 
 
 async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation: Optional[str] = None):
-    """Fetch traces from database with optional filtering"""
-    query = """
-        SELECT 
-            trace_id,
-            MIN(start_time) as start_time,
-            MAX(end_time) as end_time,
-            MIN(service_name) as service_name,
-            STRING_AGG(DISTINCT operation_name, ', ') as operation_name,
-            COUNT(*) as span_count,
-            MAX(CASE WHEN status_code > 0 THEN status_code ELSE 0 END) as status_code
-        FROM spans 
-        WHERE span_type = 'span'
-    """
-    
-    params = []
+    """Fetch traces with root (parent) span as operation name, plus optional filtering"""
+    params: list = []
+
+    def add_param(val):
+        params.append(val)
+        return f"${len(params)}"
+
+    service_clause = ""
     if service:
-        query += " AND service_name = $" + str(len(params) + 1)
-        params.append(service)
+        service_clause = f" AND service_name = {add_param(service)}"
+
+    operation_clause = ""
     if operation:
-        query += " AND operation_name LIKE $" + str(len(params) + 1) 
-        params.append(f"%{operation}%")
-        
-    query += " GROUP BY trace_id ORDER BY start_time DESC LIMIT $" + str(len(params) + 1)
-    params.append(limit)
-    
+        operation_clause = f" AND operation_name LIKE {add_param('%' + operation + '%')}"
+
+    query = f"""
+        WITH base AS (
+            SELECT *
+            FROM spans
+            WHERE span_type = 'span'
+            {service_clause}
+            {operation_clause}
+        ),
+        roots AS (
+            SELECT DISTINCT ON (trace_id)
+                trace_id,
+                operation_name AS root_operation_name,
+                start_time
+            FROM base
+            WHERE parent_span_id IS NULL OR parent_span_id = ''
+            ORDER BY trace_id, start_time
+        )
+        SELECT 
+            b.trace_id,
+            MIN(b.start_time) as start_time,
+            MAX(b.end_time) as end_time,
+            MIN(b.service_name) as service_name,
+            COALESCE(r.root_operation_name, MIN(b.operation_name)) as operation_name,
+            COUNT(*) as span_count,
+            MAX(CASE WHEN b.status_code > 0 THEN b.status_code ELSE 0 END) as status_code
+        FROM base b
+        LEFT JOIN roots r USING (trace_id)
+        GROUP BY b.trace_id, r.root_operation_name
+        ORDER BY start_time DESC
+        LIMIT {add_param(limit)}
+    """
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
-        
+
     traces = []
     for row in rows:
-        duration_ns = row['end_time'] - row['start_time']
-        traces.append({
-            "trace_id": row['trace_id'],
-            "service_name": row['service_name'],
-            "operation_name": row['operation_name'], 
-            "start_time": row['start_time'],
-            "end_time": row['end_time'],
-            "duration_ns": duration_ns,
-            "duration_ms": duration_ns / 1_000_000,
-            "span_count": row['span_count'],
-            "status_code": row['status_code'],
-            "status": "error" if row['status_code'] > 0 else "ok"
-        })
-    
+        duration = row["end_time"] - row["start_time"]
+        traces.append(
+            {
+                "trace_id": row["trace_id"],
+                "service_name": row["service_name"],
+                "operation_name": row["operation_name"],
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "duration_ms": getattr(duration, "total_seconds", lambda: duration)() * 1000
+                if hasattr(duration, "total_seconds")
+                else duration,
+                "span_count": row["span_count"],
+                "status_code": row["status_code"],
+                "status": "error" if row["status_code"] > 0 else "ok",
+            }
+        )
+
     return traces
 
 
