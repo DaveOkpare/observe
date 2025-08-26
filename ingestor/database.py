@@ -114,7 +114,7 @@ async def insert_spans_batch(spans_data: list[dict]):
         # OTel Collector expects success response even on partial failures
 
 
-async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation: Optional[str] = None):
+async def fetch_traces(limit: int = 50, offset: int = 0, service: Optional[str] = None, operation: Optional[str] = None):
     """Fetch traces with root span operation names and optional filtering"""
     params: list = []
     filters = []
@@ -132,24 +132,26 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
     query = f"""
         SELECT 
             trace_id,
-            MIN(start_time) as start_time,
-            MAX(end_time) as end_time,
-            service_name,
+            MIN(start_time) AS start_time,
+            MAX(end_time) AS end_time,
             COALESCE(
-                ANY(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
-                    THEN operation_name END),
-                ANY(operation_name)
-            ) as operation_name,
-            COUNT(*) as span_count,
-            MAX(status_code) as status_code,
-            EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time))) * 1000 as duration_ms
+                (array_agg(operation_name) FILTER (WHERE parent_span_id IS NULL OR parent_span_id = ''))[1],
+                (array_agg(operation_name))[1]
+            ) AS operation_name,
+            COALESCE(
+                (array_agg(service_name) FILTER (WHERE parent_span_id IS NULL OR parent_span_id = ''))[1],
+                (array_agg(service_name))[1]
+            ) AS service_name,
+            COUNT(*) AS span_count,
+            MAX(status_code) AS status_code,
+            EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time))) * 1000 AS duration_ms
         FROM spans
         WHERE span_type = 'span' {where_clause}
-        GROUP BY trace_id, service_name
+        GROUP BY trace_id
         ORDER BY MIN(start_time) DESC
-        LIMIT ${len(params) + 1}
+        LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
     """
-    params.append(limit)
+    params.extend([limit, offset])
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
@@ -167,7 +169,7 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
     } for row in rows]
 
 
-async def fetch_logs(limit: int = 50, level: Optional[str] = None, service: Optional[str] = None):
+async def fetch_logs(limit: int = 50, offset: int = 0, level: Optional[str] = None, service: Optional[str] = None):
     """Fetch log entries with optional filtering"""
     params = []
     filters = []
@@ -188,9 +190,9 @@ async def fetch_logs(limit: int = 50, level: Optional[str] = None, service: Opti
         FROM spans 
         WHERE span_type = 'log' {where_clause}
         ORDER BY start_time DESC 
-        LIMIT ${len(params) + 1}
+        LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
     """
-    params.append(limit)
+    params.extend([limit, offset])
     
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
@@ -280,3 +282,57 @@ async def fetch_trace_detail(trace_id: str):
         "span_count": len(spans),
         "log_count": len(logs)
     }
+
+
+async def count_traces(service: Optional[str] = None, operation: Optional[str] = None) -> int:
+    """Get total count of traces for pagination"""
+    params = []
+    filters = []
+    
+    if service:
+        filters.append(f"service_name = ${len(params) + 1}")
+        params.append(service)
+    
+    if operation:
+        filters.append(f"operation_name ILIKE ${len(params) + 1}")
+        params.append(f"%{operation}%")
+    
+    where_clause = " AND " + " AND ".join(filters) if filters else ""
+    
+    query = f"""
+        SELECT COUNT(DISTINCT trace_id) as total
+        FROM spans
+        WHERE span_type = 'span' {where_clause}
+    """
+    
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, *params)
+    
+    return row["total"]
+
+
+async def count_logs(level: Optional[str] = None, service: Optional[str] = None) -> int:
+    """Get total count of logs for pagination"""
+    params = []
+    filters = []
+    
+    if level:
+        filters.append(f"log_level = ${len(params) + 1}")
+        params.append(level.upper())
+    
+    if service:
+        filters.append(f"service_name = ${len(params) + 1}")
+        params.append(service)
+    
+    where_clause = " AND " + " AND ".join(filters) if filters else ""
+    
+    query = f"""
+        SELECT COUNT(*) as total
+        FROM spans
+        WHERE span_type = 'log' {where_clause}
+    """
+    
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, *params)
+    
+    return row["total"]
