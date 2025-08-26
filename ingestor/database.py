@@ -130,29 +130,22 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
     where_clause = " AND " + " AND ".join(filters) if filters else ""
     
     query = f"""
-        WITH base AS (
-            SELECT * FROM spans
-            WHERE span_type = 'span' {where_clause}
-        ),
-        roots AS (
-            SELECT DISTINCT ON (trace_id)
-                trace_id, operation_name AS root_operation_name
-            FROM base
-            WHERE parent_span_id IS NULL OR parent_span_id = ''
-            ORDER BY trace_id, start_time
-        )
         SELECT 
-            b.trace_id,
-            MIN(b.start_time) as start_time,
-            MAX(b.end_time) as end_time,
-            MIN(b.service_name) as service_name,
-            COALESCE(r.root_operation_name, MIN(b.operation_name)) as operation_name,
+            trace_id,
+            MIN(start_time) as start_time,
+            MAX(end_time) as end_time,
+            MIN(service_name) as service_name,
+            COALESCE(
+                MIN(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
+                    THEN operation_name END),
+                MIN(operation_name)
+            ) as operation_name,
             COUNT(*) as span_count,
-            MAX(b.status_code) as status_code
-        FROM base b
-        LEFT JOIN roots r USING (trace_id)
-        GROUP BY b.trace_id, r.root_operation_name
-        ORDER BY start_time DESC
+            MAX(status_code) as status_code
+        FROM spans
+        WHERE span_type = 'span' {where_clause}
+        GROUP BY trace_id
+        ORDER BY MIN(start_time) DESC
         LIMIT ${len(params) + 1}
     """
     params.append(limit)
