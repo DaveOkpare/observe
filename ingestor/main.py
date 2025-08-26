@@ -1,17 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from typing import Optional, List
 from ingestor.database import (
     close_db_pool,
     init_db_pool,
     serialize_spans_for_db,
     insert_spans_batch,
+    fetch_traces,
+    fetch_logs,
+    fetch_trace_detail,
 )
 from ingestor.models import TraceRequest
+import json
 
 origins = [
     "http://localhost",
     "http://localhost:8080",
+    "http://localhost:3000",  # Next.js dev server
 ]
 
 
@@ -48,3 +54,34 @@ async def receive_traces(trace_request: TraceRequest):
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/api/traces")
+async def get_traces(
+    limit: int = Query(50, le=1000),
+    service: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None),
+):
+    """Get list of traces with optional filtering"""
+    traces = await fetch_traces(limit=limit, service=service, operation=operation)
+    return {"traces": traces}
+
+
+@app.get("/api/logs") 
+async def get_logs(
+    limit: int = Query(50, le=1000),
+    level: Optional[str] = Query(None),
+    service: Optional[str] = Query(None),
+):
+    """Get list of log entries with optional filtering"""
+    logs = await fetch_logs(limit=limit, level=level, service=service)
+    return {"logs": logs}
+
+
+@app.get("/api/traces/{trace_id}")
+async def get_trace_detail(trace_id: str):
+    """Get detailed trace with all spans and associated logs"""
+    trace_detail = await fetch_trace_detail(trace_id)
+    if not trace_detail:
+        return {"error": "Trace not found"}, 404
+    return trace_detail
