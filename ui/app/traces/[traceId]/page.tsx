@@ -11,8 +11,8 @@ interface Span {
   parent_span_id: string;
   operation_name: string;
   service_name: string;
-  start_time: number;
-  end_time: number;
+  start_time: string | number;
+  end_time: string | number;
   duration_ms: number;
   status: string;
   attributes: Record<string, any>;
@@ -22,15 +22,15 @@ interface Log {
   trace_id: string;
   service_name: string;
   operation_name: string;
-  timestamp: number;
+  timestamp: string | number;
   level: string;
   message: string;
 }
 
 interface TraceDetail {
   trace_id: string;
-  start_time: number;
-  end_time: number;
+  start_time: string | number;
+  end_time: string | number;
   duration_ms: number;
   spans: Span[];
   logs: Log[];
@@ -66,8 +66,15 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
     }
   }, [resolvedParams.traceId]);
 
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp / 1_000_000).toLocaleString();
+  const formatTime = (v: string | number) => {
+    // Lazy import to avoid circular deps; inline simple parser
+    if (typeof v === 'string') {
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+    }
+    const n = v as number;
+    const d = n > 1e17 ? new Date(n / 1_000_000) : n > 1e14 ? new Date(n / 1_000) : n > 1e12 ? new Date(n) : new Date(n * 1000);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString();
   };
 
   const formatDuration = (durationMs: number) => {
@@ -92,8 +99,17 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
 
   const renderTimeline = () => {
     if (!trace || trace.spans.length === 0) return null;
-    const minStart = Math.min(...trace.spans.map(s => s.start_time));
-    const maxEnd = Math.max(...trace.spans.map(s => s.end_time));
+    const toMs = (v: string | number) => {
+      if (typeof v === 'string') return new Date(v).getTime();
+      const n = v as number;
+      if (n > 1e17) return n / 1_000_000; // ns
+      if (n > 1e14) return n / 1_000; // µs
+      if (n > 1e12) return n; // ms
+      return n * 1000; // s
+    };
+
+    const minStart = Math.min(...trace.spans.map(s => toMs(s.start_time)));
+    const maxEnd = Math.max(...trace.spans.map(s => toMs(s.end_time)));
     const total = maxEnd - minStart || 1;
 
     return (
@@ -102,8 +118,10 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
           .slice()
           .sort((a, b) => a.start_time - b.start_time)
           .map((span) => {
-            const left = ((span.start_time - minStart) / total) * 100;
-            const width = Math.max(((span.end_time - span.start_time) / total) * 100, 0.5);
+            const s = toMs(span.start_time);
+            const e = toMs(span.end_time);
+            const left = ((s - minStart) / total) * 100;
+            const width = Math.max(((e - s) / total) * 100, 0.5);
             return (
               <div key={span.span_id} className="">
                 <div className="flex items-center justify-between text-sm">

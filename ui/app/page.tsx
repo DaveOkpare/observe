@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { Activity, FileText, RefreshCcw, Filter } from "lucide-react";
 import { apiUrl } from "../lib/api";
 import StatCard from "../components/StatCard";
+import { formatDate } from "../lib/datetime";
 
 interface Trace {
   trace_id: string;
   service_name: string;
   operation_name: string;
-  start_time: number;
+  start_time: string | number;
   duration_ms: number;
   span_count: number;
   status: string;
@@ -20,7 +21,7 @@ interface Log {
   trace_id: string;
   service_name: string;
   operation_name: string;
-  timestamp: number;
+  timestamp: string | number;
   level: string;
   message: string;
 }
@@ -90,9 +91,7 @@ export default function Home() {
     return () => clearInterval(id);
   }, [autoRefresh, activeTab, traceService, traceOperation, logService, logLevel]);
 
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp / 1_000_000).toLocaleString();
-  };
+  const formatTime = (v: string | number) => formatDate(v);
 
   const formatDuration = (durationMs: number) => {
     if (durationMs < 1) return `${(durationMs * 1000).toFixed(0)}μs`;
