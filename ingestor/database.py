@@ -211,7 +211,10 @@ async def fetch_trace_detail(trace_id: str):
     query = """
         SELECT trace_id, span_id, parent_span_id, operation_name, service_name,
                span_type, start_time, end_time, status_code, attributes, log_level,
-               attributes->>'logfire.msg' as message
+               attributes->>'logfire.msg' as message,
+               CASE WHEN end_time IS NOT NULL THEN 
+                   EXTRACT(EPOCH FROM (end_time - start_time)) * 1000000000
+               ELSE 0 END as duration_ns
         FROM spans 
         WHERE trace_id = $1
         ORDER BY start_time ASC
@@ -226,8 +229,6 @@ async def fetch_trace_detail(trace_id: str):
     spans, logs = [], []
     
     for row in rows:
-        duration_ns = (row['end_time'] - row['start_time']) if row['end_time'] else 0
-        
         base_data = {
             "trace_id": row['trace_id'],
             "span_id": row['span_id'],
@@ -237,8 +238,8 @@ async def fetch_trace_detail(trace_id: str):
             "span_type": row['span_type'],
             "start_time": row['start_time'],
             "end_time": row['end_time'],
-            "duration_ns": duration_ns,
-            "duration_ms": duration_ns / 1_000_000,
+            "duration_ns": row['duration_ns'],
+            "duration_ms": row['duration_ns'] / 1_000_000,
             "status_code": row['status_code'],
             "status": "error" if row['status_code'] > 0 else "ok",
             "attributes": json.loads(row['attributes']) if row['attributes'] else {}
@@ -249,23 +250,31 @@ async def fetch_trace_detail(trace_id: str):
         else:
             spans.append(base_data)
     
-    # Calculate trace bounds
-    start_times = [s['start_time'] for s in spans]
-    end_times = [s['end_time'] for s in spans if s['end_time']]
-    
-    if start_times:
+    # Calculate trace bounds - simple Python calculation
+    if spans:
+        start_times = [s['start_time'] for s in spans]
+        end_times = [s['end_time'] for s in spans if s['end_time']]
         trace_start = min(start_times)
         trace_end = max(end_times) if end_times else trace_start
-        trace_duration = trace_end - trace_start
+        
+        # Calculate duration in Python using timestamp arithmetic
+        if end_times and trace_end and trace_start:
+            # PostgreSQL timestamps can be subtracted in Python to get timedelta
+            duration_delta = trace_end - trace_start
+            trace_duration_ns = duration_delta.total_seconds() * 1_000_000_000
+            trace_duration_ms = duration_delta.total_seconds() * 1_000
+        else:
+            trace_duration_ns = trace_duration_ms = 0
     else:
-        trace_start = trace_end = trace_duration = 0
+        trace_start = trace_end = None
+        trace_duration_ns = trace_duration_ms = 0
     
     return {
         "trace_id": trace_id,
         "start_time": trace_start,
         "end_time": trace_end, 
-        "duration_ns": trace_duration,
-        "duration_ms": trace_duration / 1_000_000,
+        "duration_ns": trace_duration_ns,
+        "duration_ms": trace_duration_ms,
         "spans": spans,
         "logs": logs,
         "span_count": len(spans),
