@@ -115,34 +115,28 @@ async def insert_spans_batch(spans_data: list[dict]):
 
 
 async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation: Optional[str] = None):
-    """Fetch traces with root (parent) span as operation name, plus optional filtering"""
+    """Fetch traces with root span operation names and optional filtering"""
     params: list = []
-
-    def add_param(val):
-        params.append(val)
-        return f"${len(params)}"
-
-    service_clause = ""
+    filters = []
+    
     if service:
-        service_clause = f" AND service_name = {add_param(service)}"
-
-    operation_clause = ""
+        filters.append(f"service_name = ${len(params) + 1}")
+        params.append(service)
+    
     if operation:
-        operation_clause = f" AND operation_name LIKE {add_param('%' + operation + '%')}"
-
+        filters.append(f"operation_name ILIKE ${len(params) + 1}")
+        params.append(f"%{operation}%")
+    
+    where_clause = " AND " + " AND ".join(filters) if filters else ""
+    
     query = f"""
         WITH base AS (
-            SELECT *
-            FROM spans
-            WHERE span_type = 'span'
-            {service_clause}
-            {operation_clause}
+            SELECT * FROM spans
+            WHERE span_type = 'span' {where_clause}
         ),
         roots AS (
             SELECT DISTINCT ON (trace_id)
-                trace_id,
-                operation_name AS root_operation_name,
-                start_time
+                trace_id, operation_name AS root_operation_name
             FROM base
             WHERE parent_span_id IS NULL OR parent_span_id = ''
             ORDER BY trace_id, start_time
@@ -154,79 +148,72 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
             MIN(b.service_name) as service_name,
             COALESCE(r.root_operation_name, MIN(b.operation_name)) as operation_name,
             COUNT(*) as span_count,
-            MAX(CASE WHEN b.status_code > 0 THEN b.status_code ELSE 0 END) as status_code
+            MAX(b.status_code) as status_code
         FROM base b
         LEFT JOIN roots r USING (trace_id)
         GROUP BY b.trace_id, r.root_operation_name
         ORDER BY start_time DESC
-        LIMIT {add_param(limit)}
+        LIMIT ${len(params) + 1}
     """
+    params.append(limit)
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
 
-    traces = []
-    for row in rows:
-        duration = row["end_time"] - row["start_time"]
-        traces.append(
-            {
-                "trace_id": row["trace_id"],
-                "service_name": row["service_name"],
-                "operation_name": row["operation_name"],
-                "start_time": row["start_time"],
-                "end_time": row["end_time"],
-                "duration_ms": getattr(duration, "total_seconds", lambda: duration)() * 1000
-                if hasattr(duration, "total_seconds")
-                else duration,
-                "span_count": row["span_count"],
-                "status_code": row["status_code"],
-                "status": "error" if row["status_code"] > 0 else "ok",
-            }
-        )
-
-    return traces
+    return [{
+        "trace_id": row["trace_id"],
+        "service_name": row["service_name"],
+        "operation_name": row["operation_name"],
+        "start_time": row["start_time"],
+        "end_time": row["end_time"],
+        "duration_ms": (row["end_time"] - row["start_time"]) / 1_000_000,
+        "span_count": row["span_count"],
+        "status_code": row["status_code"],
+        "status": "error" if row["status_code"] > 0 else "ok",
+    } for row in rows]
 
 
 async def fetch_logs(limit: int = 50, level: Optional[str] = None, service: Optional[str] = None):
-    """Fetch log entries from database with optional filtering"""
-    query = """
+    """Fetch log entries with optional filtering"""
+    params = []
+    filters = []
+    
+    if level:
+        filters.append(f"log_level = ${len(params) + 1}")
+        params.append(level.upper())
+    
+    if service:
+        filters.append(f"service_name = ${len(params) + 1}")
+        params.append(service)
+    
+    where_clause = " AND " + " AND ".join(filters) if filters else ""
+    
+    query = f"""
         SELECT trace_id, span_id, operation_name, service_name, start_time,
                log_level, attributes->>'logfire.msg' as message
         FROM spans 
-        WHERE span_type = 'log'
+        WHERE span_type = 'log' {where_clause}
+        ORDER BY start_time DESC 
+        LIMIT ${len(params) + 1}
     """
-    
-    params = []
-    if level:
-        query += " AND log_level = $" + str(len(params) + 1)
-        params.append(level.upper())
-    if service:
-        query += " AND service_name = $" + str(len(params) + 1)
-        params.append(service)
-        
-    query += " ORDER BY start_time DESC LIMIT $" + str(len(params) + 1)
     params.append(limit)
     
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
         
-    logs = []
-    for row in rows:
-        logs.append({
-            "trace_id": row['trace_id'],
-            "span_id": row['span_id'], 
-            "operation_name": row['operation_name'],
-            "service_name": row['service_name'],
-            "timestamp": row['start_time'],
-            "level": row['log_level'],
-            "message": row['message']
-        })
-    
-    return logs
+    return [{
+        "trace_id": row["trace_id"],
+        "span_id": row["span_id"], 
+        "operation_name": row["operation_name"],
+        "service_name": row["service_name"],
+        "timestamp": row["start_time"],
+        "level": row["log_level"],
+        "message": row["message"]
+    } for row in rows]
 
 
 async def fetch_trace_detail(trace_id: str):
-    """Fetch detailed trace with all spans and associated logs"""
+    """Fetch detailed trace with all spans and logs"""
     query = """
         SELECT trace_id, span_id, parent_span_id, operation_name, service_name,
                span_type, start_time, end_time, status_code, attributes, log_level,
@@ -242,13 +229,12 @@ async def fetch_trace_detail(trace_id: str):
     if not rows:
         return None
         
-    spans = []
-    logs = []
+    spans, logs = [], []
     
     for row in rows:
-        duration_ns = row['end_time'] - row['start_time'] if row['end_time'] else 0
+        duration_ns = (row['end_time'] - row['start_time']) if row['end_time'] else 0
         
-        span_data = {
+        base_data = {
             "trace_id": row['trace_id'],
             "span_id": row['span_id'],
             "parent_span_id": row['parent_span_id'],
@@ -265,19 +251,18 @@ async def fetch_trace_detail(trace_id: str):
         }
         
         if row['span_type'] == 'log':
-            logs.append({
-                **span_data,
-                "level": row['log_level'],
-                "message": row['message']
-            })
+            logs.append({**base_data, "level": row['log_level'], "message": row['message']})
         else:
-            spans.append(span_data)
+            spans.append(base_data)
     
-    # Calculate trace summary
-    if spans:
-        trace_start = min(s['start_time'] for s in spans)
-        trace_end = max(s['end_time'] for s in spans if s['end_time'])
-        trace_duration = trace_end - trace_start if trace_end else 0
+    # Calculate trace bounds
+    start_times = [s['start_time'] for s in spans]
+    end_times = [s['end_time'] for s in spans if s['end_time']]
+    
+    if start_times:
+        trace_start = min(start_times)
+        trace_end = max(end_times) if end_times else trace_start
+        trace_duration = trace_end - trace_start
     else:
         trace_start = trace_end = trace_duration = 0
     
