@@ -134,18 +134,18 @@ async def fetch_traces(limit: int = 50, service: Optional[str] = None, operation
             trace_id,
             MIN(start_time) as start_time,
             MAX(end_time) as end_time,
-            MIN(service_name) as service_name,
+            service_name,
             COALESCE(
-                MIN(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
+                ANY(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
                     THEN operation_name END),
-                MIN(operation_name)
+                ANY(operation_name)
             ) as operation_name,
             COUNT(*) as span_count,
             MAX(status_code) as status_code,
             EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time))) * 1000 as duration_ms
         FROM spans
         WHERE span_type = 'span' {where_clause}
-        GROUP BY trace_id
+        GROUP BY trace_id, service_name
         ORDER BY MIN(start_time) DESC
         LIMIT ${len(params) + 1}
     """
