@@ -134,21 +134,21 @@ async def fetch_traces(limit: int = 50, offset: int = 0, service: Optional[str] 
             trace_id,
             MIN(start_time) AS start_time,
             MAX(end_time) AS end_time,
-            COALESCE(
-                (array_agg(operation_name) FILTER (WHERE parent_span_id IS NULL OR parent_span_id = ''))[1],
-                (array_agg(operation_name))[1]
-            ) AS operation_name,
-            COALESCE(
-                (array_agg(service_name) FILTER (WHERE parent_span_id IS NULL OR parent_span_id = ''))[1],
-                (array_agg(service_name))[1]
-            ) AS service_name,
+            MAX(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
+                     THEN operation_name 
+                     ELSE NULL END) AS root_operation,
+            MAX(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
+                     THEN service_name 
+                     ELSE NULL END) AS root_service,
+            MAX(operation_name) AS any_operation,
+            MAX(service_name) AS any_service,
             COUNT(*) AS span_count,
             MAX(status_code) AS status_code,
-            EXTRACT(EPOCH FROM (MAX(end_time) - MIN(start_time))) * 1000 AS duration_ms
+            MAX(end_time) - MIN(start_time) AS duration
         FROM spans
-        WHERE span_type = 'span' {where_clause}
+        WHERE {where_clause}
         GROUP BY trace_id
-        ORDER BY MIN(start_time) DESC
+        ORDER BY start_time DESC
         LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
     """
     params.extend([limit, offset])
@@ -158,11 +158,11 @@ async def fetch_traces(limit: int = 50, offset: int = 0, service: Optional[str] 
 
     return [{
         "trace_id": row["trace_id"],
-        "service_name": row["service_name"],
-        "operation_name": row["operation_name"],
+        "service_name": row["root_service"] or row["any_service"],
+        "operation_name": row["root_operation"] or row["any_operation"],
         "start_time": row["start_time"],
         "end_time": row["end_time"],
-        "duration_ms": row["duration_ms"],
+        "duration_ms": row["duration"].total_seconds() * 1000 if row["duration"] else 0,
         "span_count": row["span_count"],
         "status_code": row["status_code"],
         "status": "error" if row["status_code"] > 0 else "ok",
