@@ -116,18 +116,18 @@ async def insert_spans_batch(spans_data: list[dict]):
 
 async def fetch_traces(limit: int = 50, offset: int = 0, service: Optional[str] = None, operation: Optional[str] = None):
     """Fetch traces with root span operation names and optional filtering"""
-    params: list = []
-    filters = []
+    params = []
+    where_conditions = ["span_type = 'span'"]
     
     if service:
-        filters.append(f"service_name = ${len(params) + 1}")
+        where_conditions.append(f"service_name = ${len(params) + 1}")
         params.append(service)
     
     if operation:
-        filters.append(f"operation_name ILIKE ${len(params) + 1}")
+        where_conditions.append(f"operation_name ILIKE ${len(params) + 1}")
         params.append(f"%{operation}%")
     
-    where_clause = " AND " + " AND ".join(filters) if filters else ""
+    where_clause = " AND ".join(where_conditions)
     
     query = f"""
         SELECT 
@@ -167,7 +167,6 @@ async def fetch_traces(limit: int = 50, offset: int = 0, service: Optional[str] 
         "status_code": row["status_code"],
         "status": "error" if row["status_code"] > 0 else "ok",
     } for row in rows]
-
 
 async def fetch_logs(limit: int = 50, offset: int = 0, level: Optional[str] = None, service: Optional[str] = None):
     """Fetch log entries with optional filtering"""
