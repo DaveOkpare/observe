@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Activity, FileText } from "lucide-react";
 import { apiUrl } from "../../../lib/api";
 import SpanRenderer from "@/components/spans/SpanRenderer";
+import JsonCode from "@/components/JsonCode";
+import { RICH_SPANS } from "@/lib/flags";
 
 interface Span {
   trace_id: string;
@@ -82,6 +84,20 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
     if (durationMs < 1) return `${(durationMs * 1000).toFixed(0)}μs`;
     if (durationMs < 1000) return `${durationMs.toFixed(1)}ms`;
     return `${(durationMs / 1000).toFixed(2)}s`;
+  };
+  const formatRelative = (value: string | number) => {
+    const now = Date.now();
+    const d = typeof value === 'string' ? new Date(value).getTime() : (value > 1e17 ? value/1_000_000 : value > 1e14 ? value/1_000 : value > 1e12 ? value : value*1000);
+    const diff = Math.max(0, now - d);
+    const sec = Math.floor(diff / 1000);
+    if (sec < 10) return 'just now';
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    return `${day}d ago`;
   };
 
   const getLevelColor = (level: string) => {
@@ -255,6 +271,7 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
                         span={span}
                         formatDuration={formatDuration}
                         formatTime={formatTime}
+                        formatRelative={formatRelative}
                       />
                     ))}
                 </div>
@@ -303,7 +320,7 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
   );
 }
 
-function SpanItem({ span, formatDuration, formatTime }: { span: Span; formatDuration: (n: number) => string; formatTime: (v: string | number) => string }) {
+function SpanItem({ span, formatDuration, formatTime, formatRelative }: { span: Span; formatDuration: (n: number) => string; formatTime: (v: string | number) => string; formatRelative: (v: string | number) => string }) {
   const [showAttrs, setShowAttrs] = useState(false);
   return (
     <div className="border border-border rounded-lg p-4">
@@ -316,15 +333,17 @@ function SpanItem({ span, formatDuration, formatTime }: { span: Span; formatDura
       <div className="text-sm text-muted-foreground grid grid-cols-2 gap-y-1">
         <p>Service: {span.service_name}</p>
         <p className="text-right">Duration: {formatDuration(span.duration_ms)}</p>
-        <p>Start: {formatTime(span.start_time)}</p>
+        <p title={formatTime(span.start_time)}>Start: {formatRelative(span.start_time)}</p>
         {span.parent_span_id && (
           <p className="text-right">Parent: {span.parent_span_id.substring(0, 8)}...</p>
         )}
       </div>
 
-      <div className="mt-3">
-        <SpanRenderer span={span} />
-      </div>
+      {RICH_SPANS && (
+        <div className="mt-3">
+          <SpanRenderer span={span} />
+        </div>
+      )}
 
       <div className="mt-3">
         <button
@@ -335,9 +354,9 @@ function SpanItem({ span, formatDuration, formatTime }: { span: Span; formatDura
           {showAttrs ? 'Hide raw attributes' : 'Show raw attributes'}
         </button>
         {showAttrs && (
-          <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-60">
-            {JSON.stringify(span.attributes, null, 2)}
-          </pre>
+          <div className="mt-2">
+            <JsonCode value={span.attributes} />
+          </div>
         )}
       </div>
     </div>

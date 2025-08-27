@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import CopyButton from "../CopyButton";
+import JsonCode from "../JsonCode";
 
 interface AdaptiveSpanViewProps {
   operationName: string;
@@ -45,9 +46,9 @@ export default function AdaptiveSpanView({ operationName, meaningfulFields, allA
           <CopyButton getText={() => JSON.stringify(allAttributes, null, 2)} />
         </div>
         {showRaw && (
-          <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-60">
-            {JSON.stringify(allAttributes, null, 2)}
-          </pre>
+          <div className="mt-2">
+            <JsonCode value={allAttributes} />
+          </div>
         )}
       </div>
     </div>

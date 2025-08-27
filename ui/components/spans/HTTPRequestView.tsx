@@ -30,20 +30,36 @@ function methodClass(method: string) {
   }
 }
 
+function statusText(code?: number) {
+  if (!code) return 'Unknown status'
+  const map: Record<number, string> = {
+    200: 'OK', 201: 'Created', 202: 'Accepted', 204: 'No Content',
+    301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified',
+    400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 408: 'Request Timeout',
+    409: 'Conflict', 422: 'Unprocessable Entity',
+    500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout',
+  }
+  return map[code] || `${Math.floor(code / 100)}xx`
+}
+
 export default function HTTPRequestView({ method, path, url, status, params, durationMs }: HTTPRequestViewProps) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className={`font-mono text-xs rounded border px-2 py-0.5 ${methodClass(method)}`}>{method || "—"}</span>
         <span className="font-mono text-sm break-all">{path || url || ""}</span>
-        <span className={`text-xs rounded border px-2 py-0.5 ${statusClass(status)}`}>{typeof status === 'number' && status > 0 ? status : '—'}</span>
+        <span className={`text-xs rounded border px-2 py-0.5 ${statusClass(status)}`} title={statusText(status)}>{typeof status === 'number' && status > 0 ? status : '—'}</span>
         {typeof durationMs === 'number' && (
           <span className="text-xs text-muted-foreground">{durationMs.toFixed(1)}ms</span>
         )}
       </div>
 
       {url && (
-        <div className="text-xs text-muted-foreground break-all">{url}</div>
+        <div className="text-xs break-all">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="underline">
+            {url}
+          </a>
+        </div>
       )}
 
       {params && Object.keys(params).length > 0 && (

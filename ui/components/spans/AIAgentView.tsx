@@ -4,6 +4,7 @@ import React from "react";
 import { parseAIConversation } from "@/lib/attributeParsers";
 import TokenUsageBadge from "./TokenUsageBadge";
 import CopyButton from "../CopyButton";
+import JsonCode from "../JsonCode";
 
 interface AIAgentViewProps {
   messages: any;
@@ -23,7 +24,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
           <h3 className="font-semibold">AI Agent Run{agentName ? `: ${agentName}` : ''}</h3>
           {modelName && <p className="text-xs text-muted-foreground">Model: {modelName}</p>}
         </div>
-        {tokenUsage?.total > 0 && <TokenUsageBadge {...tokenUsage} />}
+        {tokenUsage?.total > 0 && <TokenUsageBadge {...tokenUsage} model={modelName} />}
       </div>
 
       {conversation.systemPrompt && (
@@ -59,7 +60,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
                 <div className="text-xs font-medium">Tool Call</div>
                 <CopyButton getText={() => JSON.stringify(t, null, 2)} />
               </div>
-              <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(t, null, 2)}</pre>
+              <JsonCode value={t} />
             </div>
           ))}
           {conversation.toolResponses?.map((r: any, i: number) => (
@@ -68,7 +69,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
                 <div className="text-xs font-medium">Tool Response</div>
                 <CopyButton getText={() => JSON.stringify(r, null, 2)} />
               </div>
-              <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(r, null, 2)}</pre>
+              <JsonCode value={r} />
             </div>
           ))}
         </div>
@@ -80,7 +81,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
             <div className="text-xs uppercase tracking-wide text-green-800">Final Result</div>
             <CopyButton getText={() => JSON.stringify(finalResult, null, 2)} />
           </div>
-          <pre className="text-xs text-green-800 whitespace-pre-wrap">{JSON.stringify(finalResult, null, 2)}</pre>
+          <JsonCode value={finalResult} />
         </div>
       )}
     </div>
