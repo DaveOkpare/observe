@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Activity, FileText } from "lucide-react";
 import { apiUrl } from "../../../lib/api";
+import SpanRenderer from "@/components/spans/SpanRenderer";
 
 interface Span {
   trace_id: string;
@@ -249,23 +250,13 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
                   {trace.spans
                     .sort((a, b) => a.start_time - b.start_time)
                     .map((span) => (
-                    <div key={span.span_id} className="border border-border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-medium text-foreground">{span.operation_name}</h3>
-                        <span className={getStatusColor(span.status)}>
-                          {span.status}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p>Service: {span.service_name}</p>
-                        <p>Duration: {formatDuration(span.duration_ms)}</p>
-                        <p>Start: {formatTime(span.start_time)}</p>
-                        {span.parent_span_id && (
-                          <p>Parent: {span.parent_span_id.substring(0, 8)}...</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      <SpanItem
+                        key={span.span_id}
+                        span={span}
+                        formatDuration={formatDuration}
+                        formatTime={formatTime}
+                      />
+                    ))}
                 </div>
               )}
             </div>
@@ -307,6 +298,47 @@ export default function TraceDetailPage({ params }: { params: Promise<{ traceId:
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SpanItem({ span, formatDuration, formatTime }: { span: Span; formatDuration: (n: number) => string; formatTime: (v: string | number) => string }) {
+  const [showAttrs, setShowAttrs] = useState(false);
+  return (
+    <div className="border border-border rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-medium text-foreground">{span.operation_name}</h3>
+        <span className={span.status === 'ok' ? 'text-green-600' : 'text-red-600'}>
+          {span.status}
+        </span>
+      </div>
+      <div className="text-sm text-muted-foreground grid grid-cols-2 gap-y-1">
+        <p>Service: {span.service_name}</p>
+        <p className="text-right">Duration: {formatDuration(span.duration_ms)}</p>
+        <p>Start: {formatTime(span.start_time)}</p>
+        {span.parent_span_id && (
+          <p className="text-right">Parent: {span.parent_span_id.substring(0, 8)}...</p>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <SpanRenderer span={span} />
+      </div>
+
+      <div className="mt-3">
+        <button
+          type="button"
+          className="text-xs underline text-muted-foreground hover:text-foreground"
+          onClick={() => setShowAttrs((v) => !v)}
+        >
+          {showAttrs ? 'Hide raw attributes' : 'Show raw attributes'}
+        </button>
+        {showAttrs && (
+          <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-60">
+            {JSON.stringify(span.attributes, null, 2)}
+          </pre>
+        )}
       </div>
     </div>
   );
