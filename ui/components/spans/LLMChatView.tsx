@@ -3,6 +3,7 @@
 import React from "react";
 import TokenUsageBadge from "./TokenUsageBadge";
 import CopyButton from "../CopyButton";
+import JsonCode from "../JsonCode";
 
 interface LLMChatViewProps {
   events: any;
@@ -76,7 +77,7 @@ export default function LLMChatView({ events, model, system, tokenUsage, fallbac
         <div className="text-sm">
           <div className="font-medium">{system ? `${system}` : 'LLM'} {model ? `· ${model}` : ''}</div>
         </div>
-        <TokenUsageBadge {...tokenUsage} />
+        {tokenUsage?.total > 0 && <TokenUsageBadge {...tokenUsage} model={model} />}
       </div>
       {!!systemMsg && (
         <div>
@@ -122,11 +123,15 @@ export default function LLMChatView({ events, model, system, tokenUsage, fallbac
                 <div>
                   <div className="text-xs"><span className="font-medium">Name:</span> {t.name || '—'}</div>
                   {t.args && (
-                    <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-56 mt-1">{JSON.stringify(t.args, null, 2)}</pre>
+                    <JsonCode value={t.args} />
                   )}
                 </div>
               ) : (
-                <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-56">{typeof t.result === 'string' ? t.result : JSON.stringify(t.result, null, 2)}</pre>
+                (typeof t.result === 'string' ? (
+                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-56 whitespace-pre-wrap">{t.result}</pre>
+                ) : (
+                  <JsonCode value={t.result} />
+                ))
               )}
             </div>
           ))}

@@ -11,7 +11,10 @@ export default function LogMessageView({ level, file, func, line, message }: { l
       <div className="flex items-center justify-between">
         <span className={`text-xs font-medium ${color}`}>{levelText}</span>
         {(file || line) && (
-          <span className="text-xs font-mono text-muted-foreground">{file}{typeof line === 'number' ? `:${line}` : ''}</span>
+          <span className="text-xs font-mono text-muted-foreground flex items-center gap-2">
+            <span>{file}{typeof line === 'number' ? `:${line}` : ''}</span>
+            <CopyButton getText={() => `${file || ''}${typeof line === 'number' ? `:${line}` : ''}`} label="Copy path" />
+          </span>
         )}
       </div>
       <div className="text-sm whitespace-pre-wrap">{message || '—'}</div>

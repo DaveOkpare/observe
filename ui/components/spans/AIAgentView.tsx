@@ -17,6 +17,23 @@ interface AIAgentViewProps {
 export default function AIAgentView({ messages, finalResult, tokenUsage, modelName, agentName }: AIAgentViewProps) {
   const conversation = parseAIConversation(messages);
 
+  const renderAgentContent = (content: any) => {
+    if (content == null) return <div className="text-sm text-muted-foreground">—</div>
+    if (typeof content !== 'string') return <JsonCode value={content} />
+    const t = content.trim()
+    const looksJson = t.startsWith('{') || t.startsWith('[')
+    if (looksJson) {
+      try { return <JsonCode value={JSON.parse(t)} /> } catch {/* fallthrough */}
+    }
+    const fence = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/m.exec(t)
+    if (fence && fence[1]) {
+      return (
+        <pre className="text-xs bg-muted p-2 rounded overflow-auto whitespace-pre-wrap">{fence[1]}</pre>
+      )
+    }
+    return <div className="text-sm whitespace-pre-wrap">{content}</div>
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -46,7 +63,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
               <div className="text-xs text-muted-foreground">{m.role}</div>
               <CopyButton getText={() => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2))} />
             </div>
-            <div className="text-sm whitespace-pre-wrap">{typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}</div>
+            <div>{renderAgentContent(m.content)}</div>
           </div>
         ))}
       </div>
@@ -81,7 +98,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
             <div className="text-xs uppercase tracking-wide text-green-800">Final Result</div>
             <CopyButton getText={() => JSON.stringify(finalResult, null, 2)} />
           </div>
-          <JsonCode value={finalResult} />
+          {renderAgentContent(finalResult)}
         </div>
       )}
     </div>
