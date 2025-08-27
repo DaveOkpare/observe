@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, FileText, RefreshCcw, Filter } from "lucide-react";
-import { apiUrl } from "../lib/api";
 import StatCard from "../components/StatCard";
 import { formatDate } from "../lib/datetime";
+import { fetchTraces as apiFetchTraces, fetchLogs as apiFetchLogs, PaginationInfo } from "../lib/api";
 
 interface Trace {
   trace_id: string;
@@ -35,21 +35,31 @@ export default function Home() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
+  // Pagination
+  const [traceLimit, setTraceLimit] = useState<number>(50);
+  const [traceOffset, setTraceOffset] = useState<number>(0);
+  const [tracePagination, setTracePagination] = useState<PaginationInfo | null>(null);
+  const [logLimit, setLogLimit] = useState<number>(50);
+  const [logOffset, setLogOffset] = useState<number>(0);
+  const [logPagination, setLogPagination] = useState<PaginationInfo | null>(null);
+
   // Filters
   const [traceService, setTraceService] = useState("");
   const [traceOperation, setTraceOperation] = useState("");
   const [logService, setLogService] = useState("");
   const [logLevel, setLogLevel] = useState("");
 
-  const fetchTraces = async () => {
+  const loadTraces = async () => {
     setLoading(true);
     try {
-      const url = new URL(apiUrl(`/api/traces`), window.location.origin);
-      if (traceService) url.searchParams.set("service", traceService);
-      if (traceOperation) url.searchParams.set("operation", traceOperation);
-      const response = await fetch(url.toString());
-      const data = await response.json();
-      setTraces(data.traces || []);
+      const { data, pagination } = await apiFetchTraces({
+        limit: traceLimit,
+        offset: traceOffset,
+        service: traceService || undefined,
+        operation: traceOperation || undefined,
+      });
+      setTraces(data || []);
+      setTracePagination(pagination);
     } catch (error) {
       console.error('Failed to fetch traces:', error);
     } finally {
@@ -58,15 +68,17 @@ export default function Home() {
     }
   };
 
-  const fetchLogs = async () => {
+  const loadLogs = async () => {
     setLoading(true);
     try {
-      const url = new URL(apiUrl(`/api/logs`), window.location.origin);
-      if (logService) url.searchParams.set("service", logService);
-      if (logLevel) url.searchParams.set("level", logLevel);
-      const response = await fetch(url.toString());
-      const data = await response.json();
-      setLogs(data.logs || []);
+      const { data, pagination } = await apiFetchLogs({
+        limit: logLimit,
+        offset: logOffset,
+        service: logService || undefined,
+        level: logLevel || undefined,
+      });
+      setLogs(data || []);
+      setLogPagination(pagination);
     } catch (error) {
       console.error('Failed to fetch logs:', error);
     } finally {
@@ -77,19 +89,34 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === 'traces') {
-      fetchTraces();
+      loadTraces();
     } else {
-      fetchLogs();
+      loadLogs();
     }
   }, [activeTab]);
+
+  // React to pagination changes
+  useEffect(() => {
+    if (activeTab === 'traces') {
+      loadTraces();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [traceLimit, traceOffset]);
+
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      loadLogs();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logLimit, logOffset]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
-      activeTab === 'traces' ? fetchTraces() : fetchLogs();
+      activeTab === 'traces' ? loadTraces() : loadLogs();
     }, 5000);
     return () => clearInterval(id);
-  }, [autoRefresh, activeTab, traceService, traceOperation, logService, logLevel]);
+  }, [autoRefresh, activeTab, traceService, traceOperation, logService, logLevel, traceLimit, traceOffset, logLimit, logOffset]);
 
   const formatTime = (v: string | number) => formatDate(v);
 
@@ -151,7 +178,7 @@ export default function Home() {
               </button>
               <div className="ml-auto flex items-center gap-3 pr-4">
                 <button
-                  onClick={() => (activeTab === 'traces' ? fetchTraces() : fetchLogs())}
+                  onClick={() => (activeTab === 'traces' ? loadTraces() : loadLogs())}
                   className="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-muted"
                 >
                   <RefreshCcw className="h-4 w-4" />
@@ -197,9 +224,46 @@ export default function Home() {
                         <label className="block text-xs text-muted-foreground">Operation</label>
                         <input value={traceOperation} onChange={(e) => setTraceOperation(e.target.value)} placeholder="e.g. GET /users" className="w-full rounded border border-border bg-background px-3 py-2 text-sm" />
                       </div>
-                      <button onClick={fetchTraces} className="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm hover:bg-muted">
+                      <button onClick={() => { setTraceOffset(0); loadTraces(); }} className="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm hover:bg-muted">
                         <Filter className="h-4 w-4" /> Apply
                       </button>
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-muted-foreground">
+                        {tracePagination && (
+                          <span>
+                            Showing {tracePagination.total === 0 ? 0 : tracePagination.offset + 1}
+                            –{Math.min(tracePagination.offset + tracePagination.limit, tracePagination.total)} of {tracePagination.total}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-muted-foreground">Per page</label>
+                        <select
+                          value={traceLimit}
+                          onChange={(e) => { setTraceLimit(parseInt(e.target.value)); setTraceOffset(0); }}
+                          className="rounded border border-border bg-background px-2 py-1 text-sm"
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                        <button
+                          className="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+                          onClick={() => setTraceOffset(Math.max(0, traceOffset - traceLimit))}
+                          disabled={!tracePagination || traceOffset === 0}
+                        >
+                          Prev
+                        </button>
+                        <button
+                          className="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+                          onClick={() => setTraceOffset((traceOffset + traceLimit))}
+                          disabled={!tracePagination || !tracePagination.has_more}
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
                     {traces.length === 0 ? (
                       <p className="text-muted-foreground text-center py-8">No traces found</p>
@@ -284,9 +348,46 @@ export default function Home() {
                           <option value="ERROR">ERROR</option>
                         </select>
                       </div>
-                      <button onClick={fetchLogs} className="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm hover:bg-muted">
+                      <button onClick={() => { setLogOffset(0); loadLogs(); }} className="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm hover:bg-muted">
                         <Filter className="h-4 w-4" /> Apply
                       </button>
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-muted-foreground">
+                        {logPagination && (
+                          <span>
+                            Showing {logPagination.total === 0 ? 0 : logPagination.offset + 1}
+                            –{Math.min(logPagination.offset + logPagination.limit, logPagination.total)} of {logPagination.total}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-muted-foreground">Per page</label>
+                        <select
+                          value={logLimit}
+                          onChange={(e) => { setLogLimit(parseInt(e.target.value)); setLogOffset(0); }}
+                          className="rounded border border-border bg-background px-2 py-1 text-sm"
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                        <button
+                          className="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+                          onClick={() => setLogOffset(Math.max(0, logOffset - logLimit))}
+                          disabled={!logPagination || logOffset === 0}
+                        >
+                          Prev
+                        </button>
+                        <button
+                          className="inline-flex items-center gap-2 rounded border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+                          onClick={() => setLogOffset((logOffset + logLimit))}
+                          disabled={!logPagination || !logPagination.has_more}
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
                     {logs.length === 0 ? (
                       <p className="text-muted-foreground text-center py-8">No logs found</p>
