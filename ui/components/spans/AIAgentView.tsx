@@ -3,6 +3,7 @@
 import React from "react";
 import { parseAIConversation } from "@/lib/attributeParsers";
 import TokenUsageBadge from "./TokenUsageBadge";
+import CopyButton from "../CopyButton";
 
 interface AIAgentViewProps {
   messages: any;
@@ -22,7 +23,7 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
           <h3 className="font-semibold">AI Agent Run{agentName ? `: ${agentName}` : ''}</h3>
           {modelName && <p className="text-xs text-muted-foreground">Model: {modelName}</p>}
         </div>
-        <TokenUsageBadge {...tokenUsage} />
+        {tokenUsage?.total > 0 && <TokenUsageBadge {...tokenUsage} />}
       </div>
 
       {conversation.systemPrompt && (
@@ -40,19 +41,48 @@ export default function AIAgentView({ messages, finalResult, tokenUsage, modelNa
       <div className="space-y-2">
         {conversation.conversation.map((m: any, idx: number) => (
           <div key={idx} className={`p-2 rounded border ${m.role === 'user' ? 'bg-blue-50 border-blue-200' : 'bg-muted'}`}>
-            <div className="text-xs text-muted-foreground mb-1">{m.role}</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs text-muted-foreground">{m.role}</div>
+              <CopyButton getText={() => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2))} />
+            </div>
             <div className="text-sm whitespace-pre-wrap">{typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}</div>
           </div>
         ))}
       </div>
 
+      {/* Tool calls and responses if present */}
+      {((conversation.toolCalls?.length ?? 0) + (conversation.toolResponses?.length ?? 0) > 0) ? (
+        <div className="space-y-2">
+          {conversation.toolCalls?.map((t: any, i: number) => (
+            <div key={`call-${i}`} className="rounded border p-2 bg-purple-50 border-purple-200">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium">Tool Call</div>
+                <CopyButton getText={() => JSON.stringify(t, null, 2)} />
+              </div>
+              <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(t, null, 2)}</pre>
+            </div>
+          ))}
+          {conversation.toolResponses?.map((r: any, i: number) => (
+            <div key={`resp-${i}`} className="rounded border p-2 bg-purple-50/40 border-purple-200">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium">Tool Response</div>
+                <CopyButton getText={() => JSON.stringify(r, null, 2)} />
+              </div>
+              <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(r, null, 2)}</pre>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {finalResult && (
-        <div className="bg-green-50 border border-green-200 rounded p-3">
-          <h4 className="font-medium text-green-800 mb-2">Final Result</h4>
+        <div className="bg-green-50 border border-green-200 rounded p-2">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs uppercase tracking-wide text-green-800">Final Result</div>
+            <CopyButton getText={() => JSON.stringify(finalResult, null, 2)} />
+          </div>
           <pre className="text-xs text-green-800 whitespace-pre-wrap">{JSON.stringify(finalResult, null, 2)}</pre>
         </div>
       )}
     </div>
   )
 }
-

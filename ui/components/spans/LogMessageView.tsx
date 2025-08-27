@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import CopyButton from "../CopyButton";
 
 export default function LogMessageView({ level, file, func, line, message }: { level?: number | string; file?: string; func?: string; line?: number; message?: string }) {
   const levelText = typeof level === 'number' ? levelToText(level) : (level || 'INFO')
@@ -14,6 +15,7 @@ export default function LogMessageView({ level, file, func, line, message }: { l
         )}
       </div>
       <div className="text-sm whitespace-pre-wrap">{message || '—'}</div>
+      <div className="flex justify-end"><CopyButton getText={() => message || ''} /></div>
       {func && <div className="text-xs text-muted-foreground">in {func}()</div>}
     </div>
   );
@@ -34,4 +36,3 @@ function levelToColor(level: string) {
     default: return 'text-gray-500'
   }
 }
-

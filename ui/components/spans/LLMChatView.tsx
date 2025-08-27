@@ -2,6 +2,7 @@
 
 import React from "react";
 import TokenUsageBadge from "./TokenUsageBadge";
+import CopyButton from "../CopyButton";
 
 interface LLMChatViewProps {
   events: any;
@@ -39,6 +40,36 @@ export default function LLMChatView({ events, model, system, tokenUsage, fallbac
   const hasAssistant = messages.some((m) => m.role === 'assistant')
   if (fallbackAssistantText && !hasAssistant) messages.push({ role: 'assistant', content: fallbackAssistantText })
 
+  // Extract system prompt if present
+  const systemMsg = messages.find((m) => m.role === 'system')
+
+  // Tool calls/responses (heuristic from events stream)
+  type ToolItem = { type: 'call' | 'result'; name?: string; args?: any; result?: any; raw?: any }
+  const toolItems: ToolItem[] = arr.flatMap((e) => {
+    const items: ToolItem[] = []
+    const ename = (e?.['event.name'] || e?.event?.name || '').toString().toLowerCase()
+    // Common assistant tool_calls array (OpenAI-like)
+    if (Array.isArray(e?.tool_calls)) {
+      for (const tc of e.tool_calls) {
+        const fn = tc.function || tc.tool || {}
+        items.push({ type: 'call', name: fn.name, args: fn.arguments ?? tc.arguments, raw: tc })
+      }
+    }
+    // Explicit tool call event
+    if (ename.includes('tool_call')) {
+      items.push({ type: 'call', name: e?.tool?.name, args: e?.tool?.arguments, raw: e })
+    }
+    // Tool response/content (role=tool)
+    const role = (e?.role || e?.message?.role || '').toString().toLowerCase()
+    if (role === 'tool') {
+      items.push({ type: 'result', result: e?.content ?? e?.message?.content ?? e?.output_text ?? e?.response, raw: e })
+    }
+    if (ename.includes('tool.result')) {
+      items.push({ type: 'result', result: e?.result ?? e?.content, raw: e })
+    }
+    return items
+  })
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -47,16 +78,60 @@ export default function LLMChatView({ events, model, system, tokenUsage, fallbac
         </div>
         <TokenUsageBadge {...tokenUsage} />
       </div>
+      {!!systemMsg && (
+        <div>
+          <button
+            className="text-xs underline text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              const el = document.getElementById("llm-system-prompt")
+              if (el) el.classList.toggle("hidden")
+            }}
+          >
+            System Prompt
+          </button>
+          <div className="flex items-center justify-end mb-1">
+            <CopyButton getText={() => extractText(systemMsg.content)} />
+          </div>
+          <pre id="llm-system-prompt" className="text-xs bg-muted p-3 rounded mt-1 whitespace-pre-wrap hidden">{extractText(systemMsg.content)}</pre>
+        </div>
+      )}
+
       <div className="space-y-2">
         {messages.map((m, idx) => (
           <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded border p-2 text-sm whitespace-pre-wrap ${bubbleClass(m.role)}`}>
-              <div className="text-xs uppercase tracking-wide opacity-60 mb-1">{m.role}</div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs uppercase tracking-wide opacity-60">{m.role}</div>
+                <CopyButton getText={() => extractText(m.content) || ''} />
+              </div>
               <div>{extractText(m.content) || '—'}</div>
             </div>
           </div>
         ))}
       </div>
+
+      {toolItems.length > 0 && (
+        <div className="space-y-2">
+          {toolItems.map((t, i) => (
+            <div key={i} className={`rounded border p-2 text-sm ${t.type === 'call' ? 'bg-purple-50 border-purple-200' : 'bg-purple-50/40 border-purple-200'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs uppercase tracking-wide opacity-60">{t.type === 'call' ? 'Tool Call' : 'Tool Result'}</div>
+                <CopyButton getText={() => JSON.stringify(t.raw ?? t, null, 2)} />
+              </div>
+              {t.type === 'call' ? (
+                <div>
+                  <div className="text-xs"><span className="font-medium">Name:</span> {t.name || '—'}</div>
+                  {t.args && (
+                    <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-56 mt-1">{JSON.stringify(t.args, null, 2)}</pre>
+                  )}
+                </div>
+              ) : (
+                <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-56">{typeof t.result === 'string' ? t.result : JSON.stringify(t.result, null, 2)}</pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

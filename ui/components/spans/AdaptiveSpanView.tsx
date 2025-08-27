@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import CopyButton from "../CopyButton";
 
 interface AdaptiveSpanViewProps {
   operationName: string;
@@ -40,6 +41,9 @@ export default function AdaptiveSpanView({ operationName, meaningfulFields, allA
         >
           {showRaw ? 'Hide raw attributes' : 'Show raw attributes'}
         </button>
+        <div className="mt-1 flex justify-end">
+          <CopyButton getText={() => JSON.stringify(allAttributes, null, 2)} />
+        </div>
         {showRaw && (
           <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-60">
             {JSON.stringify(allAttributes, null, 2)}
@@ -49,4 +53,3 @@ export default function AdaptiveSpanView({ operationName, meaningfulFields, allA
     </div>
   );
 }
-

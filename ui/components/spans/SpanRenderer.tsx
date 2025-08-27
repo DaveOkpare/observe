@@ -48,7 +48,7 @@ export default function SpanRenderer({ span }: { span: any }) {
 
     case 'http-request': {
       const http = parseHTTPDetails(span.attributes || {})
-      return <HTTPRequestView {...http} />
+      return <HTTPRequestView {...http} durationMs={span.duration_ms} />
     }
 
     case 'log-message':
@@ -62,20 +62,26 @@ export default function SpanRenderer({ span }: { span: any }) {
         />
       );
 
-    case 'function-model':
+    case 'function-model': {
+      const raw = span.attributes?.model_request_parameters
+      let params: any | undefined
+      try { params = raw ? JSON.parse(raw) : undefined } catch { params = undefined }
       return (
         <FunctionModelView
           model={span.attributes?.['gen_ai.request.model']}
           error={span.attributes?.['logfire.exception.fingerprint']}
+          params={params}
         />
       );
+    }
 
     case 'database':
       return (
         <DatabaseSpanView
           statement={span.attributes?.['db.statement']}
-          operation={span.attributes?.['db.operation.name']}
+          operation={span.attributes?.['db.operation.name'] || span.attributes?.['db.operation']}
           duration={span.duration_ms}
+          system={span.attributes?.['db.system']}
         />
       );
 
@@ -85,6 +91,8 @@ export default function SpanRenderer({ span }: { span: any }) {
           address={span.attributes?.['server.address']}
           operation={span.operation_name}
           status={span.attributes?.['http.status_code']}
+          method={span.attributes?.['http.method']}
+          url={span.attributes?.['http.url']}
         />
       );
 
