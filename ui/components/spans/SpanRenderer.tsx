@@ -27,15 +27,24 @@ export default function SpanRenderer({ span }: { span: any }) {
         />
       );
 
-    case 'llm-chat':
+    case 'llm-chat': {
+      const attrs = span.attributes || {}
+      const fallbackAssistantText =
+        attrs['gen_ai.response.output_text'] ||
+        attrs['gen_ai.response.text'] ||
+        attrs['response_text'] ||
+        attrs['output_text'] ||
+        undefined
       return (
         <LLMChatView
-          events={span.attributes?.events}
-          model={span.attributes?.['gen_ai.request.model']}
-          system={span.attributes?.['gen_ai.system']}
-          tokenUsage={parseTokenUsage(span.attributes || {})}
+          events={attrs.events}
+          model={attrs['gen_ai.request.model']}
+          system={attrs['gen_ai.system']}
+          tokenUsage={parseTokenUsage(attrs)}
+          fallbackAssistantText={fallbackAssistantText}
         />
-      );
+      )
+    }
 
     case 'http-request': {
       const http = parseHTTPDetails(span.attributes || {})
@@ -91,4 +100,3 @@ export default function SpanRenderer({ span }: { span: any }) {
     }
   }
 }
-
