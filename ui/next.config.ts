@@ -1,16 +1,15 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
 
-const nextConfig: NextConfig = {
-  async rewrites() {
-    const hasExternal = !!process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (hasExternal) return [];
+const nextConfig = {
+  redirects: async () => {
     return [
       {
-        source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
+        source: "/",
+        destination: "/quotes/overview",
+        permanent: true,
       },
-    ];
+    ]
   },
-};
+}
 
-export default nextConfig;
+export default nextConfig
