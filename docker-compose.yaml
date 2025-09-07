@@ -10,10 +10,10 @@ services:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql # Mounts schema.sql when container first starts.
     command: >
       postgres
-      -c shared_buffers=256MB
-      -c max_connections=200
-      -c wal_buffers=16MB
-      -c effective_cache_size=1GB
+      -c shared_buffers=1GB
+      -c max_connections=500
+      -c wal_buffers=64MB
+      -c effective_cache_size=2GB
 
 # shared_buffers for more RAM for caching
 # wal_buffers for faster write-ahead logging
