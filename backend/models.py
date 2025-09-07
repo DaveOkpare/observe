@@ -1,5 +1,5 @@
-from datetime import datetime
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, field_validator
 
 # ref: https://github.com/open-telemetry/opentelemetry-proto/blob/v1.7.0/examples/trace.json
 
@@ -23,6 +23,7 @@ class OLTPEvent(BaseModel):
     name: str
     attributes: list[OLTPAttribute] = []
 
+
 class OLTPScope(BaseModel):
     name: str
     version: str
@@ -34,11 +35,17 @@ class OLTPSpan(BaseModel):
     span_id: str = Field(alias="spanId")
     parent_span_id: str | None = Field(alias="parentSpanId", default=None)
     name: str
-    start_time_unix_nano: str = Field(alias="startTimeUnixNano")
-    end_time_unix_nano: str = Field(alias="endTimeUnixNano")
+    start_time_unix_nano: datetime = Field(alias="startTimeUnixNano")
+    end_time_unix_nano: datetime = Field(alias="endTimeUnixNano")
     kind: int
     attributes: list[OLTPAttribute] = []
     events: list[OLTPEvent] = []
+
+    @field_validator("start_time_unix_nano", "end_time_unix_nano", mode="before")
+    def convert_nano_to_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromtimestamp(int(v) / 1_000_000_000, tz=timezone.utc)
+        return v
 
 
 class OLTPResource(BaseModel):
