@@ -1,5 +1,5 @@
 CREATE TABLE spans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     trace_id VARCHAR(32) NOT NULL,
     span_id VARCHAR(16) NOT NULL,
     parent_span_id VARCHAR(16),
