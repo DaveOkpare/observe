@@ -19,10 +19,15 @@ class OLTPAttribute(BaseModel):
 
 
 class OLTPEvent(BaseModel):
-    time_unix_nano: str = Field(alias="timeUnixNano")
+    time_unix_nano: datetime = Field(alias="timeUnixNano")
     name: str
     attributes: list[OLTPAttribute] = []
 
+    @field_validator("time_unix_nano", mode="before")
+    def convert_nano_to_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromtimestamp(int(v) / 1_000_000_000, tz=timezone.utc)
+        return v
 
 class OLTPScope(BaseModel):
     name: str
