@@ -2,9 +2,9 @@ receivers:
   otlp:
     protocols:
       http:
-      cors:
-        allowed_origins:
-          - "*"
+        cors:
+          allowed_origins:
+            - "*"
 
 processors:
   batch:
@@ -13,6 +13,7 @@ processors:
     send_batch_max_size: 16384
   memory_limiter:
     limit_mib: 512
+    check_interval: 1s
 
 exporters:
   otlphttp:
