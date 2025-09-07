@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 class OLTPAttributeValue(BaseModel):
     stringValue: str | None = None
     intValue: str | None = None  # JSON sends as string
-    floatValue: float | None = None
+    doubleValue: float | None = None
     boolValue: bool | None = None
+    arrayValue: dict | None = None
+    kvlistValue: dict | None = None
 
 
 class OLTPAttribute(BaseModel):
@@ -16,21 +18,27 @@ class OLTPAttribute(BaseModel):
     value: OLTPAttributeValue
 
 
+class OLTPEvent(BaseModel):
+    time_unix_nano: str = Field(alias="timeUnixNano")
+    name: str
+    attributes: list[OLTPAttribute] = []
+
 class OLTPScope(BaseModel):
     name: str
     version: str
-    attribues: list[OLTPAttribute]
+    attributes: list[OLTPAttribute] = []
 
 
 class OLTPSpan(BaseModel):
     trace_id: str = Field(alias="traceId")
     span_id: str = Field(alias="spanId")
-    parent_id: str = Field(alias="parentId")
-    start_time_unix_nano: datetime = Field(alias="startTimeUnixNano")
-    end_time_unix_nano: datetime = Field(alias="endTimeUnixNano")
+    parent_span_id: str | None = Field(alias="parentSpanId", default=None)
+    name: str
+    start_time_unix_nano: str = Field(alias="startTimeUnixNano")
+    end_time_unix_nano: str = Field(alias="endTimeUnixNano")
     kind: int
-    attributes: list[OLTPAttribute]
-    events: list
+    attributes: list[OLTPAttribute] = []
+    events: list[OLTPEvent] = []
 
 
 class OLTPResource(BaseModel):
