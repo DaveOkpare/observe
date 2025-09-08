@@ -1,5 +1,6 @@
 import os
 import asyncpg
+import json
 
 from backend.models import TraceRequest, OLTPAttribute
 
@@ -65,8 +66,10 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                         "start_time_unix_nano": span.start_time_unix_nano,
                         "end_time_unix_nano": span.end_time_unix_nano,
                         "kind": span.kind,
-                        "attributes": flatten_attributes(span.attributes),
-                        "events": span.events,
+                        "attributes": json.dumps(flatten_attributes(span.attributes)),
+                        "events": json.dumps(
+                            [event.model_dump() for event in span.events]
+                        ),
                     }
                 )
 
