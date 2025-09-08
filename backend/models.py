@@ -29,6 +29,7 @@ class OLTPEvent(BaseModel):
             return datetime.fromtimestamp(int(v) / 1_000_000_000, tz=timezone.utc)
         return v
 
+
 class OLTPScope(BaseModel):
     name: str
     version: str
