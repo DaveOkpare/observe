@@ -1,4 +1,14 @@
 services:
+  ingestor:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@pgbouncer:6432/observability
+    depends_on:
+      pgbouncer:
+        condition: service_started            # wait for container to start (app will still retry)
+      postgres:
+        condition: service_healthy
   postgres:
     image: postgres:15
     environment:
@@ -63,6 +73,9 @@ services:
       - 4317:4317
       - 4318:4318
       - 55679:55679
+    depends_on:
+      - postgres
+      - ingestor
 
 volumes:
   postgres_data:
