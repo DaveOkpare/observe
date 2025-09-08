@@ -71,3 +71,31 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                 )
 
     return spans_data
+
+
+async def insert_spans_batch(spans_data: list[dict]):
+    """Bulk insert spans into PostgreSQL for performance"""
+    if not spans_data:
+        return
+
+    columns = [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "name",
+        "start_time_unix_nano",
+        "end_time_unix_nano",
+        "kind",
+        "attributes",
+        "events",
+    ]
+    records = [tuple(d[col] for col in columns) for d in spans_data]
+
+    try:
+        async with pool.acquire() as conn:
+            await conn.copy_records_to_table("spans", records=records, columns=columns)
+            print(f"Inserted {len(spans_data)} spans successfully")
+    except Exception as e:
+        # Log error but don't crash - telemetry ingestion should be resilient
+        print(f"Database error inserting spans: {e}")
+        # OTel Collector expects success response even on partial failures
