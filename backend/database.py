@@ -49,7 +49,7 @@ def flatten_attributes(attributes: list[OLTPAttribute]) -> dict:
     return result
 
 
-def serialize_traces(trace_request: TraceRequest) -> list[dict]:
+def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
     """Extract and transform spans from OTLP nested structure to flat database format"""
     spans_data = []
 
