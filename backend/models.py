@@ -69,4 +69,4 @@ class OLTPResourceSpan(BaseModel):
 
 
 class TraceRequest(BaseModel):
-    resource_spans = list[OLTPResourceSpan] = Field(alias="resourceSpans")
+    resource_spans: list[OLTPResourceSpan] = Field(alias="resourceSpans")
