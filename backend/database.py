@@ -2,7 +2,7 @@ import asyncpg
 
 
 pool: asyncpg.Pool | None = None
-DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/observability"
+DATABASE_URL: str = "postgresql://postgres:postgres@localhost:6432/observability"
 
 
 async def init_db_pool():
