@@ -9,12 +9,12 @@ receivers:
 
 processors:
   batch:
-    timeout: 5s
-    send_batch_size: 8192
-    send_batch_max_size: 16384
+    timeout: 500ms                 # Even more frequent for maximum throughput
+    send_batch_size: 1024         # Very small batches = highest throughput
+    send_batch_max_size: 2048     # Conservative maximum
   memory_limiter:
-    limit_mib: 512
-    check_interval: 1s
+    limit_mib: 1024               # More memory for high throughput
+    check_interval: 500ms         # More frequent memory checks
 
 exporters:
   otlphttp:
