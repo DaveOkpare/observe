@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
+from ai.agent import text_to_sql, SQLSyntax
 from backend.database import (
     close_db_pool,
+    execute_custom_query,
     get_trace_detail,
     get_traces_paginated,
     init_db_pool,
@@ -34,6 +37,10 @@ app.add_middleware(
 )
 
 
+class QueryRequest(BaseModel):
+    query: str
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -59,3 +66,10 @@ async def fetch_traces(offset: int = 0, limit: int = 50):
 async def retrieve_trace(trace_id: str):
     trace = await get_trace_detail(trace_id)
     return trace
+
+
+@app.post("/v1/traces/query")
+async def query_traces(query_request: QueryRequest):
+    output: SQLSyntax = await text_to_sql(query_request.query)
+    result = await execute_custom_query(output.syntax)
+    return result

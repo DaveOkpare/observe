@@ -2,8 +2,39 @@ import os
 import asyncpg
 import json
 import re
+from typing import Any, Optional, Dict, List
+from dataclasses import dataclass
 
 from backend.models import TraceRequest, OLTPAttribute
+
+
+@dataclass
+class DatabaseResponse:
+    """Unified response class for all database operations"""
+
+    success: bool
+    rows: List[Dict[str, Any]]
+    count: int
+    error: Optional[str] = None
+
+    def to_dict(self, **extra_fields) -> Dict[str, Any]:
+        """Convert to dictionary with optional extra fields"""
+        result = {"success": self.success, "rows": self.rows, "count": self.count}
+        if self.error:
+            result["error"] = self.error
+        result.update(extra_fields)
+        return result
+
+    @classmethod
+    def success_response(cls, rows: List[Dict[str, Any]]) -> "DatabaseResponse":
+        """Create successful response"""
+        return cls(success=True, rows=rows, count=len(rows))
+
+    @classmethod
+    def error_response(cls, error: str) -> "DatabaseResponse":
+        """Create error response"""
+        return cls(success=False, rows=[], count=0, error=error)
+
 
 pool: asyncpg.Pool | None = None
 DATABASE_URL: str = os.getenv(
@@ -171,29 +202,29 @@ async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
                     }
                 )
 
-            return {
-                "traces": trace_list,
-                "pagination": {
+            response = DatabaseResponse.success_response(trace_list)
+            return response.to_dict(
+                pagination={
                     "offset": offset,
                     "limit": limit,
                     "total": total_traces,
                     "has_next": offset + limit < total_traces,
                     "has_prev": offset > 0,
-                },
-            }
+                }
+            )
 
     except Exception as e:
         print(f"Database error fetching traces: {e}")
-        return {
-            "traces": [],
-            "pagination": {
+        response = DatabaseResponse.error_response(str(e))
+        return response.to_dict(
+            pagination={
                 "offset": offset,
                 "limit": limit,
                 "total": 0,
                 "has_next": False,
                 "has_prev": False,
-            },
-        }
+            }
+        )
 
 
 async def get_trace_detail(trace_id: str) -> dict:
@@ -222,7 +253,8 @@ async def get_trace_detail(trace_id: str) -> dict:
             spans = await conn.fetch(query, trace_id)
 
             if not spans:
-                return {"trace_id": trace_id, "spans": []}
+                response = DatabaseResponse.success_response([])
+                return response.to_dict(trace_id=trace_id)
 
             # Convert to dict format with parsed attributes
             span_list = []
@@ -246,15 +278,43 @@ async def get_trace_detail(trace_id: str) -> dict:
                 }
                 span_list.append(span_data)
 
-            return {
-                "trace_id": trace_id,
-                "spans": span_list,
-                "total_spans": len(span_list),
-                "start_time": span_list[0]["start_time"],
-                "end_time": span_list[-1]["end_time"],
-                "duration_ms": sum(span["duration_ms"] for span in span_list),
-            }
+            response = DatabaseResponse.success_response(span_list)
+            return response.to_dict(
+                trace_id=trace_id,
+                start_time=span_list[0]["start_time"],
+                end_time=span_list[-1]["end_time"],
+                duration_ms=sum(span["duration_ms"] for span in span_list),
+            )
 
     except Exception as e:
         print(f"Database error fetching trace detail: {e}")
-        return {"trace_id": trace_id, "spans": []}
+        response = DatabaseResponse.error_response(str(e))
+        return response.to_dict(trace_id=trace_id)
+
+
+async def execute_custom_query(query: str) -> dict:
+    """Execute custom SQL query and return results"""
+    if not pool:
+        raise RuntimeError("Database pool not initialized")
+
+    try:
+        async with pool.acquire() as conn:
+            result = await conn.fetch(query)
+
+            # Convert asyncpg.Record objects to dicts
+            rows = []
+            for row in result:
+                row_dict = {}
+                for key, value in row.items():
+                    if hasattr(value, "isoformat"):  # Handle datetime objects
+                        row_dict[key] = value.isoformat()
+                    elif isinstance(value, (dict, list)):  # Handle JSONB
+                        row_dict[key] = value
+                    else:
+                        row_dict[key] = value
+                rows.append(row_dict)
+
+            return DatabaseResponse.success_response(rows).to_dict()
+
+    except Exception as e:
+        return DatabaseResponse.error_response(str(e)).to_dict()
