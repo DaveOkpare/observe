@@ -121,3 +121,140 @@ async def insert_spans_batch(spans_data: list[dict]):
         # Log error but don't crash - telemetry ingestion should be resilient
         print(f"Database error inserting spans: {e}")
         # OTel Collector expects success response even on partial failures
+
+
+async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
+    """Get paginated list of traces with summary information"""
+    if not pool:
+        raise RuntimeError("Database pool not initialized")
+
+    try:
+        async with pool.acquire() as conn:
+            # Get trace summaries with pagination
+            traces_query = """
+                SELECT 
+                    trace_id,
+                    COUNT(*) as span_count,
+                    MIN(start_time_unix_nano) as trace_start_time,
+                    MAX(end_time_unix_nano) as trace_end_time,
+                    EXTRACT(EPOCH FROM (MAX(end_time_unix_nano) - MIN(start_time_unix_nano))) * 1000 as duration_ms,
+                    (SELECT name FROM spans s2 WHERE s2.trace_id = spans.trace_id ORDER BY s2.start_time_unix_nano ASC LIMIT 1) as name
+                FROM spans 
+                GROUP BY trace_id
+                ORDER BY MIN(start_time_unix_nano) DESC
+                OFFSET $1 LIMIT $2
+            """
+
+            # Get total count for pagination metadata
+            count_query = """
+                SELECT COUNT(DISTINCT trace_id) as total_traces
+                FROM spans
+            """
+
+            traces = await conn.fetch(traces_query, offset, limit)
+            total_result = await conn.fetchrow(count_query)
+            total_traces = total_result["total_traces"] if total_result else 0
+
+            # Convert to dict format
+            trace_list = []
+            for trace in traces:
+                trace_list.append(
+                    {
+                        "trace_id": trace["trace_id"],
+                        "span_count": trace["span_count"],
+                        "start_time": trace["trace_start_time"].isoformat(),
+                        "end_time": trace["trace_end_time"].isoformat(),
+                        "duration_ms": round(trace["duration_ms"], 2)
+                        if trace["duration_ms"]
+                        else 0,
+                        "name": trace["name"],
+                    }
+                )
+
+            return {
+                "traces": trace_list,
+                "pagination": {
+                    "offset": offset,
+                    "limit": limit,
+                    "total": total_traces,
+                    "has_next": offset + limit < total_traces,
+                    "has_prev": offset > 0,
+                },
+            }
+
+    except Exception as e:
+        print(f"Database error fetching traces: {e}")
+        return {
+            "traces": [],
+            "pagination": {
+                "offset": offset,
+                "limit": limit,
+                "total": 0,
+                "has_next": False,
+                "has_prev": False,
+            },
+        }
+
+
+async def get_trace_detail(trace_id: str) -> dict:
+    """Get complete trace with all spans for detail view"""
+    if not pool:
+        raise RuntimeError("Database pool not initialized")
+
+    try:
+        async with pool.acquire() as conn:
+            query = """
+                SELECT 
+                    id,
+                    trace_id,
+                    span_id,
+                    parent_span_id,
+                    name,
+                    start_time_unix_nano,
+                    end_time_unix_nano,
+                    kind,
+                    attributes
+                FROM spans 
+                WHERE trace_id = $1
+                ORDER BY start_time_unix_nano ASC
+            """
+
+            spans = await conn.fetch(query, trace_id)
+
+            if not spans:
+                return {"trace_id": trace_id, "spans": []}
+
+            # Convert to dict format with parsed attributes
+            span_list = []
+            for span in spans:
+                span_data = {
+                    "id": str(span["id"]),
+                    "trace_id": span["trace_id"],
+                    "span_id": span["span_id"],
+                    "parent_span_id": span["parent_span_id"],
+                    "name": span["name"],
+                    "start_time": span["start_time_unix_nano"].isoformat(),
+                    "end_time": span["end_time_unix_nano"].isoformat(),
+                    "duration_ms": (
+                        span["end_time_unix_nano"] - span["start_time_unix_nano"]
+                    ).total_seconds()
+                    * 1000,
+                    "kind": span["kind"],
+                    "attributes": json.loads(span["attributes"])
+                    if span["attributes"]
+                    else {},
+                }
+                span_list.append(span_data)
+
+            return {
+                "trace_id": trace_id,
+                "spans": span_list,
+                "total_spans": len(span_list),
+                "start_time": span_list[0]["start_time"],
+                "end_time": span_list[-1]["end_time"],
+                "duration_ms": sum(span["duration_ms"] for span in span_list),
+            }
+
+    except Exception as e:
+        print(f"Database error fetching trace detail: {e}")
+        return {"trace_id": trace_id, "spans": []}
