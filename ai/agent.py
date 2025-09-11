@@ -1,6 +1,10 @@
+import os
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models import KnownModelName
+
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY environment variable is required but not set.")
 
 model: KnownModelName = "openai:gpt-4.1"
 
