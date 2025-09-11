@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import (
     close_db_pool,
+    get_trace_detail,
+    get_traces_paginated,
     init_db_pool,
     serialize_spans_for_db,
     insert_spans_batch,
@@ -45,3 +47,15 @@ async def receive_traces(trace_request: TraceRequest):
     # Insert into PostgreSQL
     await insert_spans_batch(serialized_trace_request)
     return {"partialSuccess": {}}
+
+
+@app.get("/v1/traces")
+async def fetch_traces(offset: int = 0, limit: int = 50):
+    traces = await get_traces_paginated(offset=offset, limit=limit)
+    return traces
+
+
+@app.get("/v1/traces/{trace_id}")
+async def retrieve_trace(trace_id: str):
+    trace = await get_trace_detail(trace_id)
+    return trace
