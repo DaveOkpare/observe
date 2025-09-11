@@ -7,8 +7,7 @@ CREATE TABLE spans (
     start_time_unix_nano TIMESTAMPTZ NOT NULL,
     end_time_unix_nano TIMESTAMPTZ NOT NULL,
     kind INTEGER,
-    attributes JSONB,
-    events JSONB
+    attributes JSONB
 );
 
 CREATE INDEX idx_spans_trace_id ON spans(trace_id);

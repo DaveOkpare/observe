@@ -1,6 +1,7 @@
 import os
 import asyncpg
 import json
+import re
 
 from backend.models import TraceRequest, OLTPAttribute
 
@@ -50,6 +51,22 @@ def flatten_attributes(attributes: list[OLTPAttribute]) -> dict:
     return result
 
 
+def resolve_span_name(span_name: str, attributes: dict) -> str:
+    """Resolve template variables in span names using attribute values"""
+    if not attributes:
+        return span_name
+
+    # Generic approach: resolve any {variable} patterns using available attributes
+    template_vars = re.findall(r"\{(\w+)\}", span_name)
+    resolved_name = span_name
+
+    for var in template_vars:
+        if var in attributes:
+            resolved_name = resolved_name.replace(f"{{{var}}}", str(attributes[var]))
+
+    return resolved_name
+
+
 def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
     """Extract and transform spans from OTLP nested structure to flat database format"""
     spans_data = []
@@ -57,19 +74,22 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
     for resource_spans in trace_request.resource_spans:
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
+                # Flatten attributes first
+                flattened_attrs = flatten_attributes(span.attributes)
+
+                # Resolve span name using attributes
+                resolved_name = resolve_span_name(span.name, flattened_attrs)
+
                 spans_data.append(
                     {
                         "trace_id": span.trace_id,
                         "span_id": span.span_id,
                         "parent_span_id": span.parent_span_id,
-                        "name": span.name,
+                        "name": resolved_name,
                         "start_time_unix_nano": span.start_time_unix_nano,
                         "end_time_unix_nano": span.end_time_unix_nano,
                         "kind": span.kind,
-                        "attributes": json.dumps(flatten_attributes(span.attributes)),
-                        "events": json.dumps(
-                            [event.model_dump() for event in span.events]
-                        ),
+                        "attributes": json.dumps(flattened_attrs),
                     }
                 )
 
@@ -90,7 +110,6 @@ async def insert_spans_batch(spans_data: list[dict]):
         "end_time_unix_nano",
         "kind",
         "attributes",
-        "events",
     ]
     records = [tuple(d[col] for col in columns) for d in spans_data]
 
