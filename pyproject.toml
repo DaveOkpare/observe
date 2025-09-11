@@ -9,4 +9,5 @@ dependencies = [
     "fastapi[standard]>=0.116.1",
     "logfire[fastapi]>=4.4.0",
     "pydantic>=2.11.7",
+    "pydantic-ai>=1.0.3",
 ]
