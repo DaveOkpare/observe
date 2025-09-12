@@ -103,6 +103,8 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
     spans_data = []
 
     for resource_spans in trace_request.resource_spans:
+        resource_attrs = flatten_attributes(resource_spans.resource.attributes)
+        
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
                 # Flatten attributes first
@@ -121,6 +123,8 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
                         "end_time_unix_nano": span.end_time_unix_nano,
                         "kind": span.kind,
                         "attributes": json.dumps(flattened_attrs),
+                        "service_name": resource_attrs.get("service.name", "unknown"),
+                        "resource_attributes": json.dumps(resource_attrs),
                     }
                 )
 
