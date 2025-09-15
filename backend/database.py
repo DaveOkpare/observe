@@ -145,6 +145,8 @@ async def insert_spans_batch(spans_data: list[dict]):
         "end_time_unix_nano",
         "kind",
         "attributes",
+        "service_name",
+        "resource_attributes"
     ]
     records = [tuple(d[col] for col in columns) for d in spans_data]
 
@@ -173,7 +175,14 @@ async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
                     MIN(start_time_unix_nano) as trace_start_time,
                     MAX(end_time_unix_nano) as trace_end_time,
                     EXTRACT(EPOCH FROM (MAX(end_time_unix_nano) - MIN(start_time_unix_nano))) * 1000 as duration_ms,
-                    (SELECT name FROM spans s2 WHERE s2.trace_id = spans.trace_id ORDER BY s2.start_time_unix_nano ASC LIMIT 1) as name
+                    MAX(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
+                             THEN name 
+                             ELSE NULL END) AS root_operation,
+                    MAX(CASE WHEN (parent_span_id IS NULL OR parent_span_id = '') AND service_name IS NOT NULL
+                             THEN service_name 
+                             ELSE NULL END) AS root_service,
+                    MAX(name) AS any_operation,
+                    MAX(service_name) AS any_service
                 FROM spans 
                 GROUP BY trace_id
                 ORDER BY MIN(start_time_unix_nano) DESC
@@ -202,7 +211,8 @@ async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
                         "duration_ms": round(trace["duration_ms"], 2)
                         if trace["duration_ms"]
                         else 0,
-                        "name": trace["name"],
+                        "name": trace["root_operation"] or trace["any_operation"] or "unknown-operation",
+                        "service_name": trace["root_service"] or trace["any_service"] or "unknown-service",
                     }
                 )
 
@@ -248,7 +258,8 @@ async def get_trace_detail(trace_id: str) -> dict:
                     start_time_unix_nano,
                     end_time_unix_nano,
                     kind,
-                    attributes
+                    attributes,
+                    service_name
                 FROM spans 
                 WHERE trace_id = $1
                 ORDER BY start_time_unix_nano ASC
@@ -263,6 +274,19 @@ async def get_trace_detail(trace_id: str) -> dict:
             # Convert to dict format with parsed attributes
             span_list = []
             for span in spans:
+                # Calculate duration, fallback to attributes if timestamps are same
+                calculated_duration = (span["end_time_unix_nano"] - span["start_time_unix_nano"]).total_seconds() * 1000
+                
+                # If calculated duration is 0, try to get from attributes 
+                if calculated_duration == 0 and span["attributes"]:
+                    try:
+                        attributes_dict = json.loads(span["attributes"])
+                        attr_duration = attributes_dict.get('duration_ms')
+                        if attr_duration is not None:
+                            calculated_duration = float(attr_duration)
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        pass  # Keep calculated_duration as 0
+                
                 span_data = {
                     "id": str(span["id"]),
                     "trace_id": span["trace_id"],
@@ -271,23 +295,28 @@ async def get_trace_detail(trace_id: str) -> dict:
                     "name": span["name"],
                     "start_time": span["start_time_unix_nano"].isoformat(),
                     "end_time": span["end_time_unix_nano"].isoformat(),
-                    "duration_ms": (
-                        span["end_time_unix_nano"] - span["start_time_unix_nano"]
-                    ).total_seconds()
-                    * 1000,
+                    "duration_ms": calculated_duration,
                     "kind": span["kind"],
                     "attributes": json.loads(span["attributes"])
                     if span["attributes"]
                     else {},
+                    "service_name": span["service_name"] or "unknown-service",
                 }
                 span_list.append(span_data)
 
+            # Get root span service name for trace-level info
+            root_span = next((span for span in span_list if not span.get("parent_span_id")), span_list[0] if span_list else None)
+            trace_service_name = root_span["service_name"] if root_span else "unknown-service"
+            trace_operation_name = root_span["name"] if root_span else "unknown-operation"
+            
             response = DatabaseResponse.success_response(span_list)
             return response.to_dict(
                 trace_id=trace_id,
                 start_time=span_list[0]["start_time"],
                 end_time=span_list[-1]["end_time"],
                 duration_ms=sum(span["duration_ms"] for span in span_list),
+                service_name=trace_service_name,
+                operation_name=trace_operation_name,
             )
 
     except Exception as e:
