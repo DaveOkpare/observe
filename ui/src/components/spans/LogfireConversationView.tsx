@@ -276,7 +276,7 @@ function ToolCallsSection({ toolCalls }: { toolCalls: any[] }) {
 }
 
 function RawAttributesSection({ span, config }: { span: any; config: any }) {
-  const [showRaw, setShowRaw] = useState(config.showRawAttributes || false);
+  const [showRaw, setShowRaw] = useState(false);
 
   return (
     <div>

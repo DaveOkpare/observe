@@ -56,7 +56,7 @@ const defaultConfig: SpanRenderingConfig = {
   // UI preferences
   showPlatformHints: true,
   showDebugInfo: false,
-  showRawAttributes: true,  // Show by default for better UX
+  showRawAttributes: false,  // Collapsed by default
   compactMode: false,
   
   // Conversation rendering
