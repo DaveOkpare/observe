@@ -7,6 +7,7 @@ from ai.agent import text_to_sql, SQLSyntax
 from backend.database import (
     close_db_pool,
     execute_custom_query,
+    get_services,
     get_trace_detail,
     get_traces_paginated,
     init_db_pool,
@@ -57,8 +58,22 @@ async def receive_traces(trace_request: TraceRequest):
 
 
 @app.get("/v1/traces")
-async def fetch_traces(offset: int = 0, limit: int = 50):
-    traces = await get_traces_paginated(offset=offset, limit=limit)
+async def fetch_traces(
+    offset: int = 0,
+    limit: int = 50,
+    service: str = None,
+    operation: str = None,
+    start_time: str = None,
+    end_time: str = None,
+):
+    traces = await get_traces_paginated(
+        offset=offset,
+        limit=limit,
+        service=service,
+        operation=operation,
+        start_time=start_time,
+        end_time=end_time,
+    )
     return traces
 
 
@@ -66,6 +81,12 @@ async def fetch_traces(offset: int = 0, limit: int = 50):
 async def retrieve_trace(trace_id: str):
     trace = await get_trace_detail(trace_id)
     return trace
+
+
+@app.get("/v1/services")
+async def fetch_services():
+    """Get all unique service names for dropdown filtering"""
+    return await get_services()
 
 
 @app.post("/v1/traces/query")

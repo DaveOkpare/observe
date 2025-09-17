@@ -2,6 +2,7 @@ import os
 import asyncpg
 import json
 import re
+from datetime import datetime
 from typing import Any, Optional, Dict, List
 from dataclasses import dataclass
 
@@ -104,7 +105,7 @@ def serialize_spans_for_db(trace_request: TraceRequest) -> list[dict]:
 
     for resource_spans in trace_request.resource_spans:
         resource_attrs = flatten_attributes(resource_spans.resource.attributes)
-        
+
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
                 # Flatten attributes first
@@ -146,7 +147,7 @@ async def insert_spans_batch(spans_data: list[dict]):
         "kind",
         "attributes",
         "service_name",
-        "resource_attributes"
+        "resource_attributes",
     ]
     records = [tuple(d[col] for col in columns) for d in spans_data]
 
@@ -160,43 +161,129 @@ async def insert_spans_batch(spans_data: list[dict]):
         # OTel Collector expects success response even on partial failures
 
 
-async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
+async def get_services() -> dict:
+    """Get all unique service names from spans table"""
+    if not pool:
+        raise RuntimeError("Database pool not initialized")
+
+    try:
+        async with pool.acquire() as conn:
+            query = """
+                SELECT DISTINCT service_name
+                FROM spans
+                WHERE service_name IS NOT NULL
+                ORDER BY service_name
+            """
+            rows = await conn.fetch(query)
+            services = [row["service_name"] for row in rows]
+
+            return {"success": True, "services": services, "count": len(services)}
+    except Exception as e:
+        print(f"Database query error: {e}")
+        return {"success": False, "error": str(e), "services": [], "count": 0}
+
+
+async def get_traces_paginated(
+    offset: int = 0,
+    limit: int = 50,
+    service: str = None,
+    operation: str = None,
+    start_time: str = None,
+    end_time: str = None,
+) -> dict:
     """Get paginated list of traces with summary information"""
     if not pool:
         raise RuntimeError("Database pool not initialized")
 
     try:
         async with pool.acquire() as conn:
-            # Get trace summaries with pagination
-            traces_query = """
-                SELECT 
+            # Build WHERE clauses for filtering
+            where_conditions = []
+            params = []
+            param_index = 1
+
+            if service:
+                where_conditions.append(f"service_name = ${param_index}")
+                params.append(service)
+                param_index += 1
+
+            if operation:
+                where_conditions.append(f"name ILIKE ${param_index}")
+                params.append(f"%{operation}%")
+                param_index += 1
+
+            if start_time:
+                where_conditions.append(f"start_time_unix_nano >= ${param_index}")
+                # Convert ISO string to datetime object
+                try:
+                    start_datetime = datetime.fromisoformat(
+                        start_time.replace("Z", "+00:00")
+                    )
+                    params.append(start_datetime)
+                except ValueError:
+                    # If parsing fails, skip this filter
+                    where_conditions.pop()  # Remove the condition we just added
+                else:
+                    param_index += 1
+
+            if end_time:
+                where_conditions.append(f"end_time_unix_nano <= ${param_index}")
+                # Convert ISO string to datetime object
+                try:
+                    end_datetime = datetime.fromisoformat(
+                        end_time.replace("Z", "+00:00")
+                    )
+                    params.append(end_datetime)
+                except ValueError:
+                    # If parsing fails, skip this filter
+                    where_conditions.pop()  # Remove the condition we just added
+                else:
+                    param_index += 1
+
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions)
+
+            # Add offset and limit parameters
+            offset_param = f"${param_index}"
+            limit_param = f"${param_index + 1}"
+            params.extend([offset, limit])
+
+            # Get trace summaries with pagination and filters
+            traces_query = f"""
+                SELECT
                     trace_id,
                     COUNT(*) as span_count,
                     MIN(start_time_unix_nano) as trace_start_time,
                     MAX(end_time_unix_nano) as trace_end_time,
                     EXTRACT(EPOCH FROM (MAX(end_time_unix_nano) - MIN(start_time_unix_nano))) * 1000 as duration_ms,
-                    MAX(CASE WHEN parent_span_id IS NULL OR parent_span_id = '' 
-                             THEN name 
+                    MAX(CASE WHEN parent_span_id IS NULL OR parent_span_id = ''
+                             THEN name
                              ELSE NULL END) AS root_operation,
                     MAX(CASE WHEN (parent_span_id IS NULL OR parent_span_id = '') AND service_name IS NOT NULL
-                             THEN service_name 
+                             THEN service_name
                              ELSE NULL END) AS root_service,
                     MAX(name) AS any_operation,
                     MAX(service_name) AS any_service
-                FROM spans 
+                FROM spans
+                {where_clause}
                 GROUP BY trace_id
                 ORDER BY MIN(start_time_unix_nano) DESC
-                OFFSET $1 LIMIT $2
+                OFFSET {offset_param} LIMIT {limit_param}
             """
 
-            # Get total count for pagination metadata
-            count_query = """
+            # Get total count for pagination metadata with same filters
+            count_query = f"""
                 SELECT COUNT(DISTINCT trace_id) as total_traces
                 FROM spans
+                {where_clause}
             """
 
-            traces = await conn.fetch(traces_query, offset, limit)
-            total_result = await conn.fetchrow(count_query)
+            # Execute queries with parameters
+            traces = await conn.fetch(traces_query, *params)
+            total_result = await conn.fetchrow(
+                count_query, *params[:-2]
+            )  # Exclude offset/limit for count
             total_traces = total_result["total_traces"] if total_result else 0
 
             # Convert to dict format
@@ -211,8 +298,12 @@ async def get_traces_paginated(offset: int = 0, limit: int = 50) -> dict:
                         "duration_ms": round(trace["duration_ms"], 2)
                         if trace["duration_ms"]
                         else 0,
-                        "name": trace["root_operation"] or trace["any_operation"] or "unknown-operation",
-                        "service_name": trace["root_service"] or trace["any_service"] or "unknown-service",
+                        "name": trace["root_operation"]
+                        or trace["any_operation"]
+                        or "unknown-operation",
+                        "service_name": trace["root_service"]
+                        or trace["any_service"]
+                        or "unknown-service",
                     }
                 )
 
@@ -275,18 +366,20 @@ async def get_trace_detail(trace_id: str) -> dict:
             span_list = []
             for span in spans:
                 # Calculate duration, fallback to attributes if timestamps are same
-                calculated_duration = (span["end_time_unix_nano"] - span["start_time_unix_nano"]).total_seconds() * 1000
-                
-                # If calculated duration is 0, try to get from attributes 
+                calculated_duration = (
+                    span["end_time_unix_nano"] - span["start_time_unix_nano"]
+                ).total_seconds() * 1000
+
+                # If calculated duration is 0, try to get from attributes
                 if calculated_duration == 0 and span["attributes"]:
                     try:
                         attributes_dict = json.loads(span["attributes"])
-                        attr_duration = attributes_dict.get('duration_ms')
+                        attr_duration = attributes_dict.get("duration_ms")
                         if attr_duration is not None:
                             calculated_duration = float(attr_duration)
                     except (json.JSONDecodeError, ValueError, TypeError):
                         pass  # Keep calculated_duration as 0
-                
+
                 span_data = {
                     "id": str(span["id"]),
                     "trace_id": span["trace_id"],
@@ -305,10 +398,17 @@ async def get_trace_detail(trace_id: str) -> dict:
                 span_list.append(span_data)
 
             # Get root span service name for trace-level info
-            root_span = next((span for span in span_list if not span.get("parent_span_id")), span_list[0] if span_list else None)
-            trace_service_name = root_span["service_name"] if root_span else "unknown-service"
-            trace_operation_name = root_span["name"] if root_span else "unknown-operation"
-            
+            root_span = next(
+                (span for span in span_list if not span.get("parent_span_id")),
+                span_list[0] if span_list else None,
+            )
+            trace_service_name = (
+                root_span["service_name"] if root_span else "unknown-service"
+            )
+            trace_operation_name = (
+                root_span["name"] if root_span else "unknown-operation"
+            )
+
             response = DatabaseResponse.success_response(span_list)
             return response.to_dict(
                 trace_id=trace_id,
