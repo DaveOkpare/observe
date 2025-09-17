@@ -83,6 +83,7 @@ export interface FrontendSpan {
 export interface FrontendTraceDetail {
   trace_id: string;
   operation_name: string;
+  service_name: string;
   start_time: string;
   end_time: string;
   duration_ms: number;
@@ -292,6 +293,7 @@ export function transformTraceListResponse(backendResponse: BackendTraceListResp
           end_time: new Date().toISOString(),
           duration_ms: 0,
           operation_name: 'Error parsing trace',
+          service_name: 'unknown-service',
           status: 'error'
         };
       }

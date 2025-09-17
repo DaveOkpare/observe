@@ -30,12 +30,14 @@ export interface FetchLogsParams {
 
 export async function fetchTraces(params: FetchTracesParams = {}): Promise<PaginatedResponse<Trace>> {
   const searchParams = new URLSearchParams();
-  
+
   if (params.limit) searchParams.set('limit', params.limit.toString());
   if (params.offset) searchParams.set('offset', params.offset.toString());
   if (params.service) searchParams.set('service', params.service);
   if (params.operation) searchParams.set('operation', params.operation);
-  
+  if (params.start_time) searchParams.set('start_time', params.start_time);
+  if (params.end_time) searchParams.set('end_time', params.end_time);
+
   const response = await fetch(apiUrl(`/v1/traces?${searchParams}`));
   if (!response.ok) throw new Error('Failed to fetch traces');
   
@@ -117,10 +119,50 @@ export async function generateAIAnnotation(traceId: string): Promise<AnnotationR
 export async function fetchTraceDetail(traceId: string): Promise<TraceDetail> {
   const response = await fetch(apiUrl(`/v1/traces/${traceId}`));
   if (!response.ok) throw new Error('Failed to fetch trace detail');
-  
+
   const result = await response.json();
-  
+
   // Transform backend response to frontend format
   const { transformTraceDetail } = await import('./transformers');
   return transformTraceDetail(result);
+}
+
+export interface TextToSQLRequest {
+  query: string;
+}
+
+export interface TextToSQLResponse {
+  success: boolean;
+  rows: any[];
+  count: number;
+  error?: string;
+}
+
+export async function queryTracesWithText(query: string): Promise<TextToSQLResponse> {
+  const response = await fetch(apiUrl('/v1/traces/query'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to execute text-to-SQL query');
+  }
+
+  return await response.json();
+}
+
+export interface ServicesResponse {
+  success: boolean;
+  services: string[];
+  count: number;
+  error?: string;
+}
+
+export async function fetchServices(): Promise<ServicesResponse> {
+  const response = await fetch(apiUrl('/v1/services'));
+  if (!response.ok) throw new Error('Failed to fetch services');
+  return await response.json();
 }

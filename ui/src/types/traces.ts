@@ -66,6 +66,8 @@ export interface FetchTracesParams {
   offset?: number;
   service?: string;
   operation?: string;
+  start_time?: string;
+  end_time?: string;
 }
 
 // Metrics data for dashboard

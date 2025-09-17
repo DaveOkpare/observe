@@ -49,13 +49,14 @@ interface Log {
 
 interface TraceDetail {
   trace_id: string
+  operation_name: string
+  service_name: string
   start_time: string | number
   end_time: string | number
   duration_ms: number
-  spans: Span[]
-  logs: Log[]
   span_count: number
-  log_count: number
+  status: string
+  spans: Span[]
 }
 
 function formatDuration(ms: number): string {
@@ -224,10 +225,6 @@ export default function TraceDetailDrawer({ traceId, children }: TraceDetailDraw
                     <p className="font-medium">{trace.span_count}</p>
                   </div>
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400">Logs</p>
-                    <p className="font-medium">{trace.log_count}</p>
-                  </div>
-                  <div>
                     <p className="text-gray-600 dark:text-gray-400">Start Time</p>
                     <p className="font-medium text-xs">{formatDate(trace.start_time)}</p>
                   </div>
@@ -291,35 +288,6 @@ export default function TraceDetailDrawer({ traceId, children }: TraceDetailDraw
                 )}
               </div>
 
-              {/* Logs */}
-              {trace.logs.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <FileText className="size-4" />
-                    Logs ({trace.logs.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {trace.logs
-                      .sort((a, b) => (a.timestamp as number) - (b.timestamp as number))
-                      .map((log, index) => (
-                        <div key={index} className="border rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={`font-medium text-sm ${getLevelColor(log.level)}`}>
-                              {log.level}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formatDate(log.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-sm mb-1">{log.message}</p>
-                          <p className="text-xs text-gray-500">
-                            {log.service_name} • {log.operation_name}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </DrawerBody>

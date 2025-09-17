@@ -184,7 +184,7 @@ function parseAllConversations(attributes: Record<string, any>): ConversationDat
 
 function parseConversationSource(data: any, source: string): ConversationData | null {
   try {
-    const parsed = safeJsonParse(data, null)
+    const parsed = safeJsonParse(data, [])
     if (!Array.isArray(parsed) || parsed.length === 0) return null
     
     const format = detectMessageFormat(parsed[0])
@@ -220,8 +220,8 @@ function parsePydanticAIFormat(messages: any[], source: string): ConversationDat
         return {
           role: msg?.role || 'unknown',
           content: extractContentFromParts(msg?.parts || []),
-          toolCalls: (msg?.parts || []).filter(p => p?.type === 'tool_call'),
-          toolResponses: (msg?.parts || []).filter(p => p?.type === 'tool_call_response'),
+          toolCalls: (msg?.parts || []).filter((p: any) => p?.type === 'tool_call'),
+          toolResponses: (msg?.parts || []).filter((p: any) => p?.type === 'tool_call_response'),
           originalFormat: msg
         }
       } catch (error) {

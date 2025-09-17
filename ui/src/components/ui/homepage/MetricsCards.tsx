@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { fetchTraces } from "@/lib/api"
+import type { Trace } from "@/types/traces"
 
 type Category = "red" | "orange" | "emerald" | "gray"
 type Metric = {
@@ -16,15 +17,6 @@ interface TraceMetricsData {
   activeServices?: number
 }
 
-interface Trace {
-  trace_id: string
-  span_count: number
-  duration_ms: number
-  start_time: string
-  end_time: string
-  operation_name: string  // Updated from 'name'
-  status: string          // Added for error detection
-}
 
 const getCategory = (value: number): Category => {
   if (value < 0.3) return "red"

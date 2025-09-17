@@ -127,9 +127,9 @@ function ConversationHeader({ analysis, conversation }: {
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="bg-blue-600 text-white px-2 py-1 rounded text-sm font-medium">
+          {/* <span className="bg-blue-600 text-white px-2 py-1 rounded text-sm font-medium">
             Logfire AI Conversation
-          </span>
+          </span> */}
           {identifiers.modelName && (
             <span className="bg-gray-100 px-2 py-1 rounded text-sm">
               {identifiers.modelName}
