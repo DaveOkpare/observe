@@ -32,7 +32,7 @@ class OLTPEvent(BaseModel):
 
 class OLTPScope(BaseModel):
     name: str
-    version: str
+    version: str | None = None
     attributes: list[OLTPAttribute] = []
 
 
