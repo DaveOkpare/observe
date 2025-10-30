@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: uv-format
+        name: Format with uv/ruff
+        entry: bash -c 'cd apps/server & uv format'
+        language: system
+        types: [python]
+        pass_filenames: true
