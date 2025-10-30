@@ -1,4 +1,8 @@
 services:
+  ingestor:
+    build: ./server/
+    ports:
+      - 8000:8000
   otel-collector:
     image: otel/opentelemetry-collector-contrib
     volumes:
