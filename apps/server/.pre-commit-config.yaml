@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: uv-format
         name: Format with uv/ruff
-        entry: bash -c 'cd apps/server & uv format'
+        entry: bash -c 'cd apps/server & uv run ruff format'
         language: system
         types: [python]
         pass_filenames: true
