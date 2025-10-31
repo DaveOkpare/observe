@@ -15,7 +15,12 @@ async def init_db() -> None:
         return
     try:
         _conn_pool = await asyncpg.create_pool(
-            dsn=os.getenv("DATABASE_URL"), max_size=20, min_size=10
+            dsn=os.getenv("DATABASE_URL"),
+            max_size=20,
+            min_size=10,
+            max_queries=50000,
+            max_inactive_connection_lifetime=300,
+            command_timeout=60,
         )
     except Exception as e:
         print(e)
