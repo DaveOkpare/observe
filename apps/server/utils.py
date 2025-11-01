@@ -1,7 +1,7 @@
 import json
 import re
 
-from models import TraceRequest, OLTPAttribute
+from .models import TraceRequest, OLTPAttribute
 
 
 def flatten_attributes(attributes: list[OLTPAttribute]) -> dict:

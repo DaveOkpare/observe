@@ -1,9 +1,9 @@
 from asyncpg import Pool
 from fastapi import Depends, FastAPI
 
-from db.connection import get_db
-from utils import serialize_spans
-from models import TraceRequest
+from .db.connection import get_db
+from .utils import serialize_spans
+from .models import TraceRequest
 
 app = FastAPI()
 
