@@ -3,6 +3,22 @@ services:
     build: ./server/
     ports:
       - 8000:8000
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@pgbouncer:6432/observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    restart: unless-stopped
   otel-collector:
     image: otel/opentelemetry-collector-contrib
     volumes:
@@ -16,6 +32,79 @@ services:
       - 4318:4318
       - 55679:55679
       - 55680:55680
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=observability
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c max_connections=100
+      -c wal_buffers=16MB
+      -c effective_cache_size=512MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_compression=on
+      -c random_page_cost=1.1
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1GB
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d observability -h 127.0.0.1 -p 5432"]
+      interval: 1m30s     
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    ports:
+      - "6432:6432"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/observability
+      - AUTH_TYPE=scram-sha-256
+      - POOL_MODE=transaction
+      - LISTEN_PORT=6432
+      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
+      - ADMIN_USERS=postgres
+      - MAX_CLIENT_CONN=400
+      - DEFAULT_POOL_SIZE=25
+      - MIN_POOL_SIZE=10
+      - RESERVE_POOL_SIZE=5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
