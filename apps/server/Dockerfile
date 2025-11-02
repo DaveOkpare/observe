@@ -14,5 +14,8 @@ COPY . .
 
 EXPOSE 8000
 
+# Set Python path to src directory
+ENV PYTHONPATH=/app/src
+
 # Run the application.
-CMD ["uv", "run", "fastapi", "run", "main.py", "--port", "8000", "--host", "0.0.0.0"]
+CMD ["uv", "run", "fastapi", "run", "src/main.py", "--port", "8000", "--host", "0.0.0.0"]
