@@ -51,7 +51,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../../apps/server/src/observ_server/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      - ../../apps/server/src/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
     command: >
       postgres
       -c shared_buffers=256MB
