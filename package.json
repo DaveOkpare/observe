@@ -1,5 +1,5 @@
 {
-  "name": "observe-dashboard",
+  "name": "observe",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,14 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "ruler:apply": "pnpm dlx @intellectronica/ruler@latest apply --local-only",
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
-    "dev:native": "turbo -F native dev",
-    "dev:web": "turbo -F web dev"
+    "dev:web": "turbo -F web dev",
+    "dev:docs": "turbo -F docs dev"
   },
-  "dependencies": {},
   "devDependencies": {
     "turbo": "^2.5.4"
   },
