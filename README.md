@@ -1,108 +1,225 @@
-# High-Throughput Observability System
+# Observability Platform
 
-A tracing system built using OpenTelemetry, PostgreSQL, and high-performance COPY FROM ingestion.
+An open-source observability platform built with OpenTelemetry, featuring a modern web dashboard, high-performance ingestion backend, and easy-to-use SDKs.
 
-## Architecture
+## 🏗️ Project Structure
 
 ```
-Applications � OpenTelemetry Collector � FastAPI Backend � PostgreSQL (via PgBouncer)
+obs/
+├── apps/
+│   ├── web/              # Main dashboard (Next.js)
+│   ├── docs/             # Documentation site (Fumadocs)
+│   ├── server/           # Backend ingestion API (FastAPI)
+│   └── collector/        # OTEL Collector configuration
+├── packages/             # Shared libraries and SDKs (future)
+├── infra/
+│   └── docker/           # Docker Compose configurations
+├── package.json          # Root workspace config
+├── pnpm-workspace.yaml   # PNPM workspace definition
+└── turbo.json            # Turborepo configuration
 ```
 
-- **OpenTelemetry Collector**: Receives and batches OTLP traces
-- **FastAPI Backend**: Processes traces with high-performance database insertion
-- **PostgreSQL + PgBouncer**: Optimized storage with connection pooling
-- **COPY FROM**: 8-10x faster bulk ingestion vs traditional INSERT methods
+## 🚀 Quick Start
 
-## Quick Start
+### Prerequisites
 
-### 1. Start the Infrastructure
+- [Node.js](https://nodejs.org/) >= 20
+- [pnpm](https://pnpm.io/) >= 10
+- [Python](https://www.python.org/) >= 3.13
+- [uv](https://github.com/astral-sh/uv) (Python package manager)
+- [Docker](https://www.docker.com/) and Docker Compose
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd obs
+   ```
+
+2. **Install dependencies**
+   ```bash
+   # Install frontend dependencies
+   pnpm install
+
+   # Install backend dependencies
+   cd apps/server
+   uv sync
+   cd ../..
+   ```
+
+3. **Start development servers**
+   ```bash
+   # Start all backend services (PostgreSQL, PgBouncer, OTEL Collector, API Server)
+   cd infra/docker
+   docker-compose up -d
+   # Backend API will be available at http://localhost:8000
+
+   # Start frontend (in another terminal)
+   cd ../..
+   pnpm dev:web      # Main dashboard on http://localhost:3001
+   # or
+   pnpm dev:docs     # Documentation on http://localhost:4000
+   ```
+
+   **Alternative:** Run backend locally (without Docker)
+   ```bash
+   cd apps/server
+   PYTHONPATH=src uv run fastapi dev src/main.py
+   ```
+
+## 📦 Apps & Packages
+
+### Apps
+
+- **[web](apps/web/)** - Main observability dashboard
+  - Next.js 16 with Turbopack
+  - React 19
+  - TailwindCSS 4
+  - Runs on port 3001
+
+- **[docs](apps/docs/)** - Documentation site
+  - Built with [Fumadocs](https://fumadocs.vercel.app/)
+  - Runs on port 4000
+
+- **[server](apps/server/)** - Backend ingestion API
+  - FastAPI with async PostgreSQL
+  - OTLP trace ingestion endpoint
+  - Runs on port 8000
+
+- **[collector](apps/collector/)** - OTEL Collector config
+  - Receives telemetry on ports 4317 (gRPC) and 4318 (HTTP)
+
+### Packages
+
+Coming soon: SDK packages for Python, JavaScript/TypeScript, and other languages.
+
+## 🛠️ Development
+
+### Available Scripts
+
 ```bash
+# Frontend (from root)
+pnpm dev              # Start all frontend apps in dev mode
+pnpm dev:web          # Start main dashboard only
+pnpm dev:docs         # Start docs site only
+pnpm build            # Build all apps
+pnpm check-types      # Type check all apps
+
+# Backend (from apps/server)
+PYTHONPATH=src uv run fastapi dev src/main.py   # Start dev server
+uv run python -m pytest                         # Run tests
+uv sync                                         # Install dependencies
+```
+
+### Server Structure
+
+```
+apps/server/
+├── src/
+│   ├── db/                   # Database layer
+│   │   ├── __init__.py
+│   │   ├── connection.py
+│   │   └── schema.sql
+│   ├── __init__.py
+│   ├── main.py               # FastAPI app & routes
+│   ├── models.py             # Pydantic models for OTLP
+│   └── utils.py              # Data transformation utilities
+├── tests/                    # Test files
+├── Dockerfile
+└── pyproject.toml
+```
+
+The server uses a simple src-layout pattern with PYTHONPATH pointing to the src directory.
+All imports are relative from src/ (e.g., `from db.connection import get_db`).
+```
+
+## 🐳 Docker
+
+### Development
+
+```bash
+cd infra/docker
 docker-compose up -d
 ```
 
-This starts:
-- PostgreSQL (port 5432) with performance tuning
-- PgBouncer (port 6432) for connection pooling  
-- OpenTelemetry Collector (ports 4317/4318) for trace ingestion
-- FastAPI Backend (port 8000) for trace processing
+This starts all backend services:
+- **PostgreSQL** (port 5432) - Database
+- **PgBouncer** (port 6432) - Connection pooler
+- **OTEL Collector** (ports 4317, 4318) - Telemetry receiver
+- **Backend Ingestor** (port 8000) - FastAPI application
 
-### 2. Send Traces to the System
-
-**Configure your application's OpenTelemetry exporter:**
-
-```python
-# Python example
-import os
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4318"
-```
-
-```javascript
-// Node.js example
-process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
-```
-
-```yaml
-# Docker Compose service
-environment:
-  - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-```
-
-**Or send directly via curl:**
+To view logs:
 ```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d @traces.json \
-  http://localhost:4318/v1/traces
+docker-compose logs -f ingestor  # Backend API logs
+docker-compose logs -f           # All services
 ```
 
-### 3. Query Your Data
+To stop all services:
+```bash
+docker-compose down
+```
+
+### Production
+
+Build and run:
+```bash
+cd apps/server
+docker build -t observ-server .
+docker run -p 8000:8000 -e DATABASE_URL=<url> observ-server
+```
+
+## 📚 API Endpoints
+
+### Traces Ingestion
+
+**POST** `/v1/traces`
+
+Accepts OTLP JSON format traces.
+
+Example:
+```bash
+curl -X POST http://localhost:8000/v1/traces \\
+  -H "Content-Type: application/json" \\
+  -d @trace.json
+```
+
+## 🗄️ Database
+
+The platform uses PostgreSQL with the following schema:
+
+- `spans` table - Stores trace spans with JSONB attributes
+
+See [apps/server/src/db/schema.sql](apps/server/src/db/schema.sql) for details.
+
+## 🧪 Testing
 
 ```bash
-# Connect to database via PgBouncer
-PGPASSWORD=postgres psql -h localhost -p 6432 -U postgres -d observability
+# Backend tests
+cd apps/server
+uv run pytest
 
-# Check inserted spans
-SELECT COUNT(*) FROM spans;
+# Frontend tests (coming soon)
+pnpm test
 ```
 
-## Configuration
+## 📖 Documentation
 
-### OpenTelemetry Collector Endpoints
-- **HTTP**: `http://localhost:4318/v1/traces`  
-- ~~**gRPC**: `http://localhost:4317/v1/traces`~~ (not added)
+Visit the docs site at `http://localhost:4000` when running locally, or check the [apps/docs/content](apps/docs/content) directory.
 
-### Database Access
-- **Application (via PgBouncer)**: `postgresql://postgres:postgres@localhost:6432/observability`
-- **Direct PostgreSQL**: `postgresql://postgres:postgres@localhost:5432/observability`
+## 🤝 Contributing
 
-## Performance Results
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-### Load Test Results
+## 📄 License
 
-| Component | Test Type | Throughput | Configuration | Notes |
-|-----------|-----------|------------|---------------|-------|
-| **Full Pipeline** | End-to-end | 7,800 RPS | Single collector | Sustained, zero data loss |
-| **Database Only** | Direct COPY FROM | 97,000 RPS | 1024 batch size | Peak performance |
-| **Database Only** | Direct COPY FROM | 96,800 RPS | 512 batch size | Optimal efficiency |
+This project is licensed under the terms specified in [LICENSE](LICENSE).
 
-### Batch Size Performance (Database Only)
+## 🙏 Acknowledgments
 
-| Batch Size | Throughput | Avg Batch Time | Efficiency |
-|------------|------------|----------------|------------|
-| 512 | 96,808 RPS | 12.7ms | 99.9% |
-| **1024** | **96,943 RPS** | **25.1ms** | **100%** ✅ |
-| 2048 | 80,578 RPS | 56.6ms | 83.1% |
-| 4096 | 83,478 RPS | 107.1ms | 86.1% |
-| 8192 | 71,584 RPS | 164.1ms | 73.8% |
-
-### Architecture Features
-
-- **COPY FROM insertion**: AsyncPG `copy_records_to_table()` for 8-10x performance vs INSERT
-- **Optimized batching**: 500ms timeout, 1024 batch size (proven optimal)
-- **Strategic indexing**: Trace ID, span ID, and time-based queries optimized
-- **Connection pooling**: 200 client → 50 actual database connections
-- **Zero data loss**: 100% span ingestion success rate under load
-
-## System Requirements
-
-- Docker & Docker Compose
-- 2GB+ RAM recommended for PostgreSQL buffer tuning
+Built with:
+- [OpenTelemetry](https://opentelemetry.io/)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [Next.js](https://nextjs.org/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [Turborepo](https://turbo.build/)

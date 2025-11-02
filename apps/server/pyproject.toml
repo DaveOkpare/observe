@@ -1,0 +1,16 @@
+[project]
+name = "observe-server"
+version = "0.1.0"
+description = "Observability platform backend server"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.30.0",
+    "fastapi[standard]>=0.120.2",
+    "pydantic>=2.12.3",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+]
