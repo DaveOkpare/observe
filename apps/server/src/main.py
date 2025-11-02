@@ -1,11 +1,20 @@
+from contextlib import asynccontextmanager
 from asyncpg import Pool
 from fastapi import Depends, FastAPI
 
-from db.connection import get_db
+from db.connection import close_db, get_db, init_db
 from utils import serialize_spans
 from models import TraceRequest
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await init_db()
+    yield
+    await close_db()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/v1/traces")
