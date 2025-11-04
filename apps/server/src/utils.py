@@ -38,7 +38,7 @@ def resolve_span_name(span_name: str, attributes: dict) -> str:
     return resolved_name
 
 
-def serialize_spans(trace_request: TraceRequest) -> list[dict]:
+def serialize_spans(trace_request: TraceRequest) -> list[tuple]:
     """Extract and transform spans from OTLP nested structure to flat database format"""
     spans_data = []
 
@@ -54,17 +54,17 @@ def serialize_spans(trace_request: TraceRequest) -> list[dict]:
                 resolved_name = resolve_span_name(span.name, flattened_attrs)
 
                 spans_data.append(
-                    {
-                        "trace_id": span.trace_id,
-                        "span_id": span.span_id,
-                        "parent_span_id": span.parent_span_id,
-                        "name": resolved_name,
-                        "start_time_unix_nano": span.start_time_unix_nano,
-                        "end_time_unix_nano": span.end_time_unix_nano,
-                        "kind": span.kind,
-                        "attributes": json.dumps(flattened_attrs),
-                        "resource_attributes": json.dumps(resource_attrs),
-                    }
+                    (
+                        span.trace_id,
+                        span.span_id,
+                        span.parent_span_id,
+                        resolved_name,
+                        span.start_time_unix_nano,
+                        span.end_time_unix_nano,
+                        span.kind,
+                        json.dumps(flattened_attrs),
+                        json.dumps(resource_attrs),
+                    )
                 )
 
     return spans_data

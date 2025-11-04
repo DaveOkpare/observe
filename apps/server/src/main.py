@@ -20,7 +20,7 @@ app = FastAPI(lifespan=lifespan)
 @app.post("/v1/traces")
 async def insert_traces(request: TraceRequest, db: Pool = Depends(get_db)):
     async with db.acquire() as conn:
-        spans_data = [tuple(span.values()) for span in serialize_spans(request)]
+        spans_data = serialize_spans(request)
         columns = [
             "trace_id",
             "span_id",
