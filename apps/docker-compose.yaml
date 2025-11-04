@@ -1,6 +1,6 @@
 services:
   ingestor:
-    build: ../../apps/server/
+    build: ./server/
     ports:
       - 8000:8000
     environment:
@@ -22,7 +22,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib
     volumes:
-      - ../../apps/collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
       - 1888:1888
       - 8888:8888
@@ -51,7 +51,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../../apps/server/src/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      - ./server/src/db/schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
     command: >
       postgres
       -c shared_buffers=256MB
